@@ -2,13 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
-
-# --- लाइव्ह मोडसाठी ऑटो-रिफ्रेश लायब्ररी ---
-try:
-    from streamlit_autorefresh import st_autorefresh
-except ImportError:
-    st.error("कृपया तुमच्या requirements.txt मध्ये 'streamlit-autorefresh' जोडा आणि री-डिप्लॉय करा.")
 
 # --- UI Config ---
 st.set_page_config(page_title="AlphaTracker | Terminal", layout="wide")
@@ -50,6 +43,13 @@ def convert_to_ist(df):
         df.index = df.index.tz_convert('Asia/Kolkata')
     return df
 
+# ⚡ CACHE ENGINE: हा फंक्शन डेटा मेमरीमध्ये लॉक करेल, ज्यामुळे सर्व्हर हँग होणार नाही
+@st.cache_data(ttl=60)  # १ मिनिटासाठी डेटा कॅश होईल, त्यानंतरच नवीन डेटा ओढेल
+def download_bulk_data(tickers_list, period_param):
+    tickers_string = " ".join(tickers_list)
+    df = yf.download(tickers=tickers_string, period=period_param, interval="1m", group_by='ticker', progress=False)
+    return df
+
 def scan_all_day_movements(df, live_mode=False):
     triggered_signals = []
     if len(df) < 21:
@@ -76,42 +76,21 @@ def scan_all_day_movements(df, live_mode=False):
             })
     return triggered_signals
 
-def trigger_popup_alert(stock_name, price, time_str):
-    popup_html = f"""
-    <script>
-        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        var oscillator = audioCtx.createOscillator();
-        var gainNode = audioCtx.createGain();
-        oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-        oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
-        oscillator.start(); setTimeout(function() {{ oscillator.stop(); }}, 350);
-    </script>
-    """
-    st.components.v1.html(popup_html, height=0, width=0)
-
-# --- Sidebar UI Controls ---
+# --- Sidebar UI ---
 st.sidebar.header("🕹️ Control Terminal")
 mode = st.sidebar.radio("Select Mode:", ["📅 Last Session History", "🔴 LIVE Market Tracker"])
-
-# जर मोड LIVE असेल, तर दर ३० सेकंदांनी स्क्रीन ऑटोमॅटिकली रिफ्रेश होईल (बॅकग्राउंड गोठणार नाही)
-if mode == "🔴 LIVE Market Tracker":
-    st_autorefresh(interval=30000, key="live_refresh")
-
 scan_btn = st.sidebar.button("⚡ Run Scanner", type="primary", use_container_width=True)
 
-# मुख्य रन लॉजिक (while True पूर्ण काढून टाकलंय)
 if scan_btn or mode == "🔴 LIVE Market Tracker":
     all_signals = []
     stock_counts = {}
     is_live = (mode == "🔴 LIVE Market Tracker")
     period_param = "1d" if is_live else "5d"
     
-    with st.spinner("⏳ Fetching Stock Universe... (साधारण ५ ते ७ सेकंद लागतील)"):
-        tickers_string = " ".join(TICKERS_POOL)
-        raw_data = yf.download(tickers=tickers_string, period=period_param, interval="1m", group_by='ticker', progress=False)
+    with st.spinner("⏳ Cache Engine Active: Loading Universe Data safely..."):
+        raw_data = download_bulk_data(TICKERS_POOL, period_param)
     
-    if not raw_data.empty:
+    if raw_data is not None and not raw_data.empty:
         for ticker in TICKERS_POOL:
             try:
                 if ticker in raw_data.columns.levels[0]:
@@ -122,8 +101,6 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
                     continue
                     
                 data = convert_to_ist(data)
-                
-                # शेवटचा ट्रेडिंग दिवस फिल्टर करणे
                 all_days = data.index.normalize().unique()
                 if len(all_days) >= 1:
                     data = data[data.index.normalize() == all_days[-1]]
@@ -133,7 +110,6 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
                 if signals:
                     stock_name = ticker.replace(".NS", "")
                     stock_counts[stock_name] = stock_counts.get(stock_name, 0) + len(signals)
-                    
                     for sig in signals:
                         all_signals.append({
                             "Stock": stock_name,
@@ -152,11 +128,6 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
             df_signals = pd.DataFrame(all_signals)
             df_signals['Time_Obj'] = pd.to_datetime(df_signals['Time (IST)'], format='%I:%M %p')
             df_signals = df_signals.sort_values(by='Time_Obj', ascending=False)
-            
-            if is_live:
-                latest = df_signals.iloc[0]
-                trigger_popup_alert(latest['Stock'], latest['Price'], latest['Time (IST)'])
-                st.markdown(f"<div class='alert-banner'>🚨 LIVE INSTANT SIGNAL: Smart money activity detected in <b>{latest['Stock']}</b> at ₹{latest['Price']} ({latest['Time (IST)']})</div>", unsafe_allow_html=True)
 
             col1, col2 = st.columns([1, 3])
             with col1:
@@ -182,6 +153,7 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
         else:
             st.warning("No dynamic institutional breakouts found in this session.")
     else:
-        st.error("Yahoo Finance कडून डेटा मिळाला नाही. कृपया पुन्हा प्रयत्न करा.")
+        st.error("Yahoo Finance सर्व्हर व्यस्त आहे. कृपया २ सेकंदांनी पुन्हा 'Run Scanner' दाबा.")
 else:
     st.info("💡 स्कॅनर सुरू करण्यासाठी डाव्या बाजूला असलेल्या '⚡ Run Scanner' बटणावर क्लिक करा.")
+    
