@@ -137,7 +137,7 @@ def execute_algorithmic_scan(df, mode_selection):
     if len(df) < 21:
         return signals
 
-    # Live Mode evaluates only the current closing candle. History evaluates the session timeline.
+    # Clean alignment to pull entire session data for chronological tracking
     range_start = len(df) - 1 if mode_selection == "REAL-TIME SCALPER ENGINE" else 20
     range_end = len(df)
 
@@ -152,7 +152,7 @@ def execute_algorithmic_scan(df, mode_selection):
         base_avg_vol = lookback_window['Volume'].mean()
         base_max_vol = lookback_window['Volume'].max()
         
-        # Algorithmic Volume Spike Metric Constraint (4.5x lookback expansion)
+        # Volume Spike Constraint
         if vol > (base_avg_vol * 4.5) and vol > base_max_vol:
             signals.append({
                 "Time": timestamp_str,
@@ -165,14 +165,13 @@ def execute_algorithmic_scan(df, mode_selection):
 
 # --- BROWSER JS WEB AUDIO INTERACTION INJECTOR ---
 def trigger_terminal_popup(stock_symbol, execution_price, alert_time):
-    # Web-API Native Audio Pipeline Execution & Non-blocking Dialog Window Trigger
     javascript_payload = f"""
     <script>
         var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         var oscillator = audioCtx.createOscillator();
         var gainNode = audioCtx.createGain();
         oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // High sharp alarm frequency
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
         gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
         oscillator.connect(gainNode);
         gainNode.connect(audioCtx.destination);
@@ -200,14 +199,14 @@ if activation_trigger or selected_engine == "REAL-TIME SCALPER ENGINE":
         aggregated_signals = []
         rank_distribution = {}
         
+        # Fixed: Changed "5d" to "7d" to cleanly fetch historical data even after long weekends/holidays.
+        data_scope = "1d" if selected_engine == "REAL-TIME SCALPER ENGINE" else "7d"
+        
         if selected_engine == "REAL-TIME SCALPER ENGINE":
             st.toast("Re-indexing real-time order books...", icon="🔄")
-            data_scope = "1d"
         else:
             st.info("Parsing downstream history arrays. Compiling metrics...")
-            data_scope = "5d"
 
-        # Consolidated Async-Mimic Download Matrix
         string_payload = " ".join(CUSTOM_TICKERS)
         raw_feed = yf.download(tickers=string_payload, period=data_scope, interval="1m", group_by='ticker', progress=False)
         
@@ -223,7 +222,7 @@ if activation_trigger or selected_engine == "REAL-TIME SCALPER ENGINE":
                     
                 ticker_frame = format_to_ist(ticker_frame)
                 
-                # Filter down exclusively to the active or latest complete exchange calendar day
+                # Dynamic Check: Pulls the absolute last active calendar session present in the downloaded data structure
                 calendar_ticks = ticker_frame.index.normalize().unique()
                 if len(calendar_ticks) >= 1:
                     ticker_frame = ticker_frame[ticker_frame.index.normalize() == calendar_ticks[-1]]
@@ -253,13 +252,11 @@ if activation_trigger or selected_engine == "REAL-TIME SCALPER ENGINE":
             df_signals['Time_Sort'] = pd.to_datetime(df_signals['Timestamp (IST)'], format='%H:%M')
             df_signals = df_signals.sort_values(by='Time_Sort', ascending=False)
             
-            # POPUP PIPELINE EXECUTION FOR LIVE INSTANCES
             if selected_engine == "REAL-TIME SCALPER ENGINE":
                 latest_hit = df_signals.iloc[0]
                 trigger_terminal_popup(latest_hit['Ticker'], latest_hit['Price (INR)'], latest_hit['Timestamp (IST)'])
                 st.markdown(f"<div class='alert-banner'>⚠️ INSTANT BLOCK TRADING ALERT: Institutional positioning verified on {latest_hit['Ticker']} at Price ₹{latest_hit['Price (INR)']} ({latest_hit['Timestamp (IST)']})</div>", unsafe_allow_html=True)
             
-            # Layout Distribution Terminal Panels
             panel_left, panel_right = st.columns([1, 3])
             
             with panel_left:
@@ -272,7 +269,6 @@ if activation_trigger or selected_engine == "REAL-TIME SCALPER ENGINE":
                 df_terminal_view = df_signals[["Timestamp (IST)", "Ticker", "Price (INR)", "Volume Metric", "Historical Base Vol"]]
                 st.dataframe(df_terminal_view, use_container_width=True, hide_index=True)
                 
-            # --- PROFESSIONAL INTEGRATED PLOTLY CORE GRAPHICS ---
             st.markdown("### 📊 Array Visualizer Terminal")
             for index, row in df_signals.head(4).iterrows():
                 with st.expander(f"📊 Tracking Array Stream: {row['Ticker']} @ {row['Timestamp (IST)']}", expanded=True if index==0 else False):
@@ -308,7 +304,6 @@ if activation_trigger or selected_engine == "REAL-TIME SCALPER ENGINE":
                 st.warning("No structural institutional volume spikes matching profile conditions found inside the array footprint.")
                 break
                 
-        # Handle dynamic page repaint timing adjustments
         if selected_engine == "REAL-TIME SCALPER ENGINE":
             time.sleep(loop_interval)
             st.rerun()
