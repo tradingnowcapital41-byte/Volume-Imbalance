@@ -2,10 +2,16 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-import time
+from datetime import datetime
 
-# --- Terminal Professional UI Config ---
-st.set_page_config(page_title="AlphaTracker | Financial Terminal", layout="wide")
+# --- लाइव्ह मोडसाठी ऑटो-रिफ्रेश लायब्ररी ---
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ImportError:
+    st.error("कृपया तुमच्या requirements.txt मध्ये 'streamlit-autorefresh' जोडा आणि री-डिप्लॉय करा.")
+
+# --- UI Config ---
+st.set_page_config(page_title="AlphaTracker | Terminal", layout="wide")
 
 st.markdown("""
 <style>
@@ -16,9 +22,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🏹 AlphaTracker™ Terminal")
-st.caption("Institutional Volume Scanner • High-Momentum Mid & SmallCap Universe (Non-F&O)")
+st.caption("Institutional Volume Scanner • Mid & SmallCap Momentum Universe (Non-F&O)")
 
-# --- ⚡ NEW 100 HIGH-VOLUME MID/SMALLCAP STOCKS POOL (F&O सोडून कडक मोमेंटम वाले) ---
+# --- ⚡ १०० नॉन-F&O हाय-मोमेंटम स्टॉक्स ---
 TICKERS_POOL = [
     "NIACL.NS", "TARIL.NS", "AMBER.NS", "NETWEB.NS", "TEJASNET.NS", "HSCL.NS", "DATAPATTNS.NS", 
     "OLECTRA.NS", "WAAREEENER.NS", "HFCL.NS", "SOLARINDS.NS", "POONAWALLA.NS", "BDL.NS", "OLAELEC.NS", 
@@ -80,33 +86,32 @@ def trigger_popup_alert(stock_name, price, time_str):
         gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
         oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
         oscillator.start(); setTimeout(function() {{ oscillator.stop(); }}, 350);
-        alert('🚨 INSTITUTIONAL SIGNAL\\n\\nStock: {stock_name}\\nPrice: ₹{price}\\nTime: {time_str}');
     </script>
     """
     st.components.v1.html(popup_html, height=0, width=0)
 
-# --- Sidebar UI ---
+# --- Sidebar UI Controls ---
 st.sidebar.header("🕹️ Control Terminal")
 mode = st.sidebar.radio("Select Mode:", ["📅 Last Session History", "🔴 LIVE Market Tracker"])
-scan_btn = st.sidebar.button("⚡ Start Terminal Scanner", type="primary", use_container_width=True)
 
+# जर मोड LIVE असेल, तर दर ३० सेकंदांनी स्क्रीन ऑटोमॅटिकली रिफ्रेश होईल (बॅकग्राउंड गोठणार नाही)
+if mode == "🔴 LIVE Market Tracker":
+    st_autorefresh(interval=30000, key="live_refresh")
+
+scan_btn = st.sidebar.button("⚡ Run Scanner", type="primary", use_container_width=True)
+
+# मुख्य रन लॉजिक (while True पूर्ण काढून टाकलंय)
 if scan_btn or mode == "🔴 LIVE Market Tracker":
+    all_signals = []
+    stock_counts = {}
+    is_live = (mode == "🔴 LIVE Market Tracker")
+    period_param = "1d" if is_live else "5d"
     
-    while True:
-        all_signals = []
-        stock_counts = {}
-        is_live = (mode == "🔴 LIVE Market Tracker")
-        period_param = "1d" if is_live else "5d"
-        
-        status = st.empty()
-        status.info("⏳ Processing Core High-Volume Stream... (Taking 5-7 Seconds)")
-
-        # ⚡ Secure Batch Download (नो-ब्लॉक, १०० स्टॉक्स एकदम सेफ आणि सुपरफास्ट)
+    with st.spinner("⏳ Fetching Stock Universe... (साधारण ५ ते ७ सेकंद लागतील)"):
         tickers_string = " ".join(TICKERS_POOL)
         raw_data = yf.download(tickers=tickers_string, period=period_param, interval="1m", group_by='ticker', progress=False)
-        
-        status.empty()
-
+    
+    if not raw_data.empty:
         for ticker in TICKERS_POOL:
             try:
                 if ticker in raw_data.columns.levels[0]:
@@ -174,12 +179,9 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
                     fig.add_trace(go.Bar(x=df_slice.index, y=df_slice['Volume'], name='Volume Spike', yaxis='y2', opacity=0.35, marker_color='#00e676'))
                     fig.update_layout(template="plotly_dark", yaxis=dict(title='Price'), yaxis2=dict(title='Volume', overlaying='y', side='right', showgrid=False), xaxis_rangeslider_visible=False, height=300)
                     st.plotly_chart(fig, use_container_width=True)
-            break
         else:
-            if not is_live:
-                st.warning("No dynamic institutional breakouts found in this session.")
-                break
-                
-        if is_live:
-            time.sleep(25)
-            st.rerun()
+            st.warning("No dynamic institutional breakouts found in this session.")
+    else:
+        st.error("Yahoo Finance कडून डेटा मिळाला नाही. कृपया पुन्हा प्रयत्न करा.")
+else:
+    st.info("💡 स्कॅनर सुरू करण्यासाठी डाव्या बाजूला असलेल्या '⚡ Run Scanner' बटणावर क्लिक करा.")
