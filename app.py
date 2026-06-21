@@ -3,9 +3,8 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 import time
-from concurrent.futures import ThreadPoolExecutor
 
-# --- Professional UI Config (Bloomberg Style) ---
+# --- Terminal Professional UI Config ---
 st.set_page_config(page_title="AlphaTracker | Financial Terminal", layout="wide")
 
 st.markdown("""
@@ -17,71 +16,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🏹 AlphaTracker™ Terminal")
-st.caption("Professional Institutional Scanner for High-Momentum Stocks")
+st.caption("Institutional Volume Scanner • High-Momentum Mid & SmallCap Universe (Non-F&O)")
 
-# --- TICKERS POOL ---
+# --- ⚡ NEW 100 HIGH-VOLUME MID/SMALLCAP STOCKS POOL (F&O सोडून कडक मोमेंटम वाले) ---
 TICKERS_POOL = [
-    "INFY.NS", "RELIANCE.NS", "BHARTIARTL.NS", "TCS.NS", "HDFCBANK.NS", "NIACL.NS", "IFCI.NS", "TARIL.NS", 
-    "AMBER.NS", "BAJFINANCE.NS", "NETWEB.NS", "ICICIBANK.NS", "COFORGE.NS", "HCLTECH.NS", "ADANIENT.NS", 
-    "TEJASNET.NS", "ADANIPOWER.NS", "MM.NS", "MARUTI.NS", "HSCL.NS", "SBIN.NS", "BHEL.NS", "ZEEL.NS", 
-    "SUZLON.NS", "TECHM.NS", "BSE.NS", "ADANIPORTS.NS", "TRENT.NS", "DATAPATTNS.NS", "BAJAJ-AUTO.NS", 
-    "MCX.NS", "PERSISTENT.NS", "KOTAKBANK.NS", "WIPRO.NS", "NTPC.NS", "DIXON.NS", "REDINGTON.NS", 
-    "AXISBANK.NS", "TATASTEEL.NS", "IDEA.NS", "OLECTRA.NS", "INDUSINDBK.NS", "HINDALCO.NS", "DMART.NS", 
-    "WAAREEENER.NS", "LT.NS", "HFCL.NS", "JIOFIN.NS", "INDIGO.NS", "LICI.NS", "EICHERMOT.NS", "SOLARINDS.NS", 
-    "VBL.NS", "POONAWALLA.NS", "BDL.NS", "POLYCAB.NS", "BEL.NS", "ULTRACEMCO.NS", "OLAELEC.NS", "VEDL.NS", 
-    "ADANIGREEN.NS", "SAMMAANCAP.NS", "BERGEPAINT.NS", "POWERINDIA.NS", "ABCAPITAL.NS", "CDSL.NS", 
-    "JYOTICNC.NS", "TITAN.NS", "NYKAA.NS", "ITC.NS", "SUNPHARMA.NS", "GRSE.NS", "ADANIENSOL.NS", 
-    "JBMA.NS", "AUROPHARMA.NS", "CGPOWER.NS", "HAL.NS", "RBLBANK.NS", "SAIL.NS", "BHARATFORG.NS", 
-    "BPCL.NS", "MUTHOOTFIN.NS", "YESBANK.NS", "PAGEIND.NS", "KAYNES.NS", "INDUSTOWER.NS", "ANGELONE.NS", 
-    "HINDUNILVR.NS", "ZENTEC.NS", "NATIONALUM.NS", "LAURUSLABS.NS", "TORNTPHARM.NS", "TVSMOTOR.NS", 
-    "GICRE.NS", "POWERGRID.NS", "JUBLFOOD.NS", "MOTHERSON.NS", "APOLLOHOSP.NS", "ICICIGI.NS", "RADICO.NS", 
-    "LUPIN.NS", "COALINDIA.NS", "CARBORUNIV.NS", "UPL.NS", "MPHASIS.NS", "DLF.NS", "SHRIRAMFIN.NS", 
-    "NESTLEIND.NS", "GMRAIRPORT.NS", "ATGL.NS", "DIVISLAB.NS", "FEDERALBNK.NS", "NAUKRI.NS", "ASHOKLEY.NS", 
-    "CRAFTSMAN.NS", "OFSS.NS", "NBCC.NS", "TATAELXSI.NS", "NLCINDIA.NS", "HINDPETRO.NS", "INDHOTEL.NS", 
-    "HEROMOTOCO.NS", "ASIANPAINT.NS", "BATAINDIA.NS", "IOC.NS", "MAXHEALTH.NS", "CANBK.NS", "AWL.NS", 
-    "TATACOMM.NS", "CHOLAFIN.NS", "GLENMARK.NS", "JSWENERGY.NS", "CIPLA.NS", "HINDZINC.NS", "UNIONBANK.NS", 
-    "KPITTECH.NS", "MAZDOCK.NS", "GAIL.NS", "APARINDS.NS", "NAM-INDIA.NS", "CUMMINSIND.NS", "IDBI.NS", 
-    "KEI.NS", "ICICIPRULI.NS", "ONGC.NS", "SCI.NS", "TATAPOWER.NS", "NMDC.NS", "360ONE.NS", "ABB.NS", 
-    "COCHINSHIP.NS", "PAYTM.NS", "FORCEMOT.NS", "INOXWIND.NS", "RRKABEL.NS", "GRASIM.NS", "BOSCHLTD.NS", 
-    "DRREDDY.NS", "STARHEALTH.NS", "BANDHANBNK.NS", "MARICO.NS", "NAVINFLUOR.NS", "HINDCOPPER.NS", 
-    "LODHA.NS", "WOCKPHARMA.NS", "HDFCLIFE.NS", "KALYANKJIL.NS", "BANKINDIA.NS", "JINDALSTEL.NS", 
-    "ENGINERSIN.NS", "PFC.NS", "PNB.NS", "FACT.NS", "AUBANK.NS", "BAJAJFINSV.NS", "JSWSTEEL.NS", 
-    "TATACONSUM.NS", "COROMANDEL.NS", "KPRMILL.NS", "BRITANNIA.NS", "GODREJCP.NS", "GRANULES.NS", 
-    "BANKBARODA.NS", "CARTRADE.NS", "LTF.NS", "PIDILITIND.NS", "RVNL.NS", "IDFCFIRSTB.NS", "VOLTAS.NS", 
-    "IRFC.NS", "MAHABANK.NS", "SIEMENS.NS", "INDIANB.NS", "JSWINFRA.NS", "SONACOMS.NS", "PRESTIGE.NS", 
-    "SYRMA.NS", "MANKIND.NS", "POLICYBZR.NS", "HDFCAMC.NS", "CGCL.NS", "FORTIS.NS", "SCHAEFFLER.NS", 
-    "TATATECH.NS", "PHOENIXLTD.NS", "USHAMART.NS", "GESHIP.NS", "KEC.NS", "RECLTD.NS", "UNITDSPR.NS", 
-    "BEML.NS", "KFINTECH.NS", "WELCORP.NS", "CAPLIPOINT.NS", "IIFL.NS", "MANAPPURAM.NS", "CAMS.NS", 
-    "OIL.NS", "ZYDUSLIFE.NS", "NHPC.NS", "APLAPOLLO.NS", "AMBUJACEM.NS", "WELSPUNLIV.NS", "NATCOPHARM.NS", 
-    "JINDALSAW.NS", "CHENNPETRO.NS", "RPOWER.NS", "MRPL.NS", "CHOICEIN.NS", "SRF.NS", "TIINDIA.NS", 
-    "AIAENG.NS", "ANANTRAJ.NS", "ITI.NS", "TITAGARH.NS", "MRF.NS", "BLUESTARCO.NS", "COLPAL.NS", 
-    "GODREJPROP.NS", "FIVESTAR.NS", "PATANJALI.NS", "DABUR.NS", "JPPOWER.NS", "HAVELLS.NS", "MOTILALOFS.NS", 
-    "DELHIVERY.NS", "CONCOR.NS", "BIOCON.NS", "SONATSOFTW.NS", "AEGISLOG.NS", "EIDPARRY.NS", "PCBL.NS", 
-    "GODFRYPHLP.NS", "PPLPHARMA.NS", "PIIND.NS", "ASTRAL.NS", "FLUOROCHEM.NS", "JSL.NS", "JBCHEPHARM.NS", 
-    "NUVAMA.NS", "KIRLOSENG.NS", "ASTERDM.NS", "SUPREMEIND.NS", "FINCABLES.NS", "SBILIFE.NS", "GLAND.NS", 
-    "PETRONET.NS", "TRITURBINE.NS", "KIMS.NS", "UNOMINDA.NS", "MFSL.NS", "BAJAJHLDNG.NS", "LICHSGFIN.NS", 
-    "TIMKEN.NS", "GLAXO.NS", "CENTRALBK.NS", "UBL.NS", "EXIDEIND.NS", "TORNTPOWER.NS", "KARURVYSYA.NS", 
-    "DEEPAKFERT.NS", "NEWGEN.NS", "HUDCO.NS", "NCC.NS", "M&MFIN.NS", "SUNDARMFIN.NS", "IREDA.NS", 
-    "LEMONTREE.NS", "J&KBANK.NS", "NH.NS", "SBICARD.NS", "ABREL.NS", "MMTC.NS", "ESCORTS.NS", 
-    "EMAMILTD.NS", "GMDCLTD.NS", "ZENSARTECH.NS", "ELGIEQUIP.NS", "DEVYANI.NS", "MSUMI.NS", "INTELLECT.NS", 
-    "NEULANDLAB.NS", "ALKEM.NS", "CROMPTON.NS", "JKTYRE.NS", "IGL.NS", "IPCALAB.NS", "CHALET.NS", 
-    "BLS.NS", "DEEPAKNTR.NS", "LATENTVIEW.NS", "SAREGAMA.NS", "SHYAMMETL.NS", "VTL.NS", "BHARTIHEXA.NS", 
-    "FSL.NS", "IRCTC.NS", "DALBHARAT.NS", "CONCORDBIO.NS", "LALPATHLAB.NS", "JMFINANCIL.NS", "ACE.NS", 
-    "ZFCVINDIA.NS", "SBFC.NS", "LINDEINDIA.NS", "AFFLE.NS", "PNBHOUSING.NS", "SHREECEM.NS", "BALRAMCHIN.NS", 
-    "GRAVITA.NS", "THERMAX.NS", "HONASA.NS", "ECLERX.NS", "BSOFT.NS", "TATAINVEST.NS", "SYNGENE.NS", 
-    "CHAMBLFERT.NS", "TATACHEM.NS", "CEATLTD.NS", "AARTIIND.NS", "IEX.NS", "GODREJIND.NS", "RAINBOW.NS", 
-    "LTTS.NS", "CYIENT.NS", "GPIL.NS", "APOLLOTYRE.NS", "INDIAMART.NS", "ELECON.NS", "MGL.NS", 
-    "BALKRISIND.NS", "NAVA.NS", "CHOLAHLDNG.NS", "BRIGADE.NS", "OBEROIRLTY.NS", "ARE&M.NS", "UCOBANK.NS", 
-    "GRAPHITE.NS", "TECHNOE.NS", "IRCON.NS", "SAPPHIRE.NS", "JWL.NS", "CRISIL.NS", "PVRINOX.NS", 
-    "CUB.NS", "IRB.NS", "JUBLINGREA.NS", "HONAUT.NS", "TRIDENT.NS", "APTUS.NS", "ACC.NS", "AAVAS.NS", 
-    "KAJARIACER.NS", "JKCEMENT.NS", "MINDACORP.NS", "CASTROLIND.NS", "ENDURANCE.NS", "MEDANTA.NS", 
-    "RAILTEL.NS", "HOMEFIRST.NS", "SIGNATURE.NS", "ABBOTINDIA.NS", "SJVN.NS", "ABFRL.NS", "HEG.NS", 
-    "CCL.NS", "LTFOODS.NS", "UTIAMC.NS", "BAYERCROP.NS", "TEGA.NS", "IOB.NS", "POLYMED.NS", 
-    "CREDITACC.NS", "CESC.NS", "MAPMYINDIA.NS", "AJANTPHARM.NS", "ATUL.NS", "SUNTV.NS", "ERIS.NS", 
-    "TTML.NS", "SARDAEN.NS", "SWANCORP.NS", "RKFORGE.NS", "BLUEDART.NS", "CIEINDIA.NS", "WHIRLPOOL.NS", 
-    "GALLANTT.NS", "RHIM.NS", "CANFINHOME.NS", "ZYDUSWELL.NS", "PFIZER.NS", "EIHOTEL.NS", "3MINDIA.NS", 
-    "BIKAJI.NS", "ASAHIINDIA.NS", "CLEAN.NS", "SOBHA.NS", "RITES.NS", "JUBLPHARMA.NS", "INDIACEM.NS", 
-    "NUVOCO.NS", "BBTC.NS", "RAMCOCEM.NS", "SUMICHEM.NS", "DCMSHRIRAM.NS"
+    "NIACL.NS", "TARIL.NS", "AMBER.NS", "NETWEB.NS", "TEJASNET.NS", "HSCL.NS", "DATAPATTNS.NS", 
+    "OLECTRA.NS", "WAAREEENER.NS", "HFCL.NS", "SOLARINDS.NS", "POONAWALLA.NS", "BDL.NS", "OLAELEC.NS", 
+    "POWERINDIA.NS", "JYOTICNC.NS", "GRSE.NS", "JBMA.NS", "CGPOWER.NS", "KAYNES.NS", "ZENTEC.NS", 
+    "LAURUSLABS.NS", "GICRE.NS", "RADICO.NS", "CARBORUNIV.NS", "GMRAIRPORT.NS", "CRAFTSMAN.NS", 
+    "NBCC.NS", "NLCINDIA.NS", "INDHOTEL.NS", "AWL.NS", "TATACOMM.NS", "GLENMARK.NS", "JSWENERGY.NS", 
+    "MAZDOCK.NS", "APARINDS.NS", "NAM-INDIA.NS", "CUMMINSIND.NS", "KEI.NS", "SCI.NS", "COCHINSHIP.NS", 
+    "FORCEMOT.NS", "INOXWIND.NS", "RRKABEL.NS", "STARHEALTH.NS", "WOCKPHARMA.NS", "KALYANKJIL.NS", 
+    "ENGINERSIN.NS", "FACT.NS", "COROMANDEL.NS", "KPRMILL.NS", "GRANULES.NS", "CARTRADE.NS", "LTF.NS", 
+    "IDFCFIRSTB.NS", "JSWINFRA.NS", "SONACOMS.NS", "PRESTIGE.NS", "SYRMA.NS", "MANKIND.NS", "POLICYBZR.NS", 
+    "CGCL.NS", "FORTIS.NS", "SCHAEFFLER.NS", "TATATECH.NS", "PHOENIXLTD.NS", "USHAMART.NS", "GESHIP.NS", 
+    "KEC.NS", "BEML.NS", "KFINTECH.NS", "WELCORP.NS", "CAPLIPOINT.NS", "IIFL.NS", "MANAPPURAM.NS", 
+    "CAMS.NS", "WELSPUNLIV.NS", "NATCOPHARM.NS", "JINDALSAW.NS", "CHENNPETRO.NS", "RPOWER.NS", "MRPL.NS", 
+    "CHOICEIN.NS", "ANANTRAJ.NS", "ITI.NS", "TITAGARH.NS", "BLUESTARCO.NS", "FIVESTAR.NS", "PATANJALI.NS", 
+    "JPPOWER.NS", "MOTILALOFS.NS", "DELHIVERY.NS", "SONATSOFTW.NS", "AEGISLOG.NS", "EIDPARRY.NS", 
+    "PCBL.NS", "GODFRYPHLP.NS", "PPLPHARMA.NS", "FLUOROCHEM.NS", "JBCHEPHARM.NS"
 ]
 
 def convert_to_ist(df):
@@ -99,33 +52,23 @@ def scan_all_day_movements(df, live_mode=False):
     start_idx = len(df) - 1 if live_mode else 20
     for i in range(start_idx, len(df)):
         current_candle = df.iloc[i]
-        current_volume = current_candle['Volume']
-        current_close = current_candle['Close']
-        current_time = df.index[i].strftime('%I:%M %p')
+        vol = current_candle['Volume']
+        close_p = current_candle['Close']
+        time_str = df.index[i].strftime('%I:%M %p')
         
-        prev_20_candles = df.iloc[i-20:i]
-        avg_dry_volume = prev_20_candles['Volume'].mean()
-        max_dry_volume = prev_20_candles['Volume'].max()
+        prev_20 = df.iloc[i-20:i]
+        avg_vol = prev_20['Volume'].mean()
+        max_vol = prev_20['Volume'].max()
         
-        if current_volume > (avg_dry_volume * 4.5) and current_volume > max_dry_volume:
+        if vol > (avg_vol * 4.5) and vol > max_vol:
             triggered_signals.append({
-                "Time": current_time,
-                "Price": round(current_close, 2),
-                "Volume": int(current_volume),
-                "Avg Dry Vol": int(avg_dry_volume),
+                "Time": time_str,
+                "Price": round(close_p, 2),
+                "Volume": int(vol),
+                "Avg Dry Vol": int(avg_vol),
                 "Raw_Index": i
             })
     return triggered_signals
-
-# single ticker साठी वेगवान सिम्पल फेचिंग फंक्शन
-def fetch_single_ticker_data(ticker, period_param):
-    try:
-        df = yf.download(tickers=ticker, period=period_param, interval="1m", progress=False)
-        if not df.empty and len(df) >= 25:
-            return ticker, df
-    except Exception:
-        pass
-    return ticker, None
 
 def trigger_popup_alert(stock_name, price, time_str):
     popup_html = f"""
@@ -142,7 +85,7 @@ def trigger_popup_alert(stock_name, price, time_str):
     """
     st.components.v1.html(popup_html, height=0, width=0)
 
-# --- Sidebar Controls ---
+# --- Sidebar UI ---
 st.sidebar.header("🕹️ Control Terminal")
 mode = st.sidebar.radio("Select Mode:", ["📅 Last Session History", "🔴 LIVE Market Tracker"])
 scan_btn = st.sidebar.button("⚡ Start Terminal Scanner", type="primary", use_container_width=True)
@@ -152,28 +95,30 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
     while True:
         all_signals = []
         stock_counts = {}
-        
         is_live = (mode == "🔴 LIVE Market Tracker")
         period_param = "1d" if is_live else "5d"
         
-        status_msg = st.empty()
-        status_msg.info("⚡ Parallel Engine Active: Downloading Nifty 500 stocks concurrently...")
+        status = st.empty()
+        status.info("⏳ Processing Core High-Volume Stream... (Taking 5-7 Seconds)")
 
-        # ⚡ MULTITHREADING ENGINE (एकाच वेळी २० थ्रेड्स पॅरेलल डेटा खेचतील - सुपरफास्ट)
-        downloaded_results = {}
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            futures = [executor.submit(fetch_single_ticker_data, ticker, period_param) for ticker in TICKERS_POOL]
-            for fut in futures:
-                t, res_df = fut.result()
-                if res_df is not None:
-                    downloaded_results[t] = res_df
+        # ⚡ Secure Batch Download (नो-ब्लॉक, १०० स्टॉक्स एकदम सेफ आणि सुपरफास्ट)
+        tickers_string = " ".join(TICKERS_POOL)
+        raw_data = yf.download(tickers=tickers_string, period=period_param, interval="1m", group_by='ticker', progress=False)
+        
+        status.empty()
 
-        status_msg.empty() # प्रोग्रेस मेसेज काढून टाका
-
-        # डाउनलोड झालेल्या डेटावर स्कॅनिंग सुरू
-        for ticker, data in downloaded_results.items():
+        for ticker in TICKERS_POOL:
             try:
+                if ticker in raw_data.columns.levels[0]:
+                    data = raw_data[ticker].dropna()
+                else:
+                    continue
+                if data.empty or len(data) < 25:
+                    continue
+                    
                 data = convert_to_ist(data)
+                
+                # शेवटचा ट्रेडिंग दिवस फिल्टर करणे
                 all_days = data.index.normalize().unique()
                 if len(all_days) >= 1:
                     data = data[data.index.normalize() == all_days[-1]]
@@ -236,5 +181,5 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
                 break
                 
         if is_live:
-            time.sleep(20)
+            time.sleep(25)
             st.rerun()
