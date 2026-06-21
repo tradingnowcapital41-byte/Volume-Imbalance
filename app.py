@@ -44,12 +44,15 @@ def convert_to_ist(df):
         df.index = df.index.tz_convert('Asia/Kolkata')
     return df
 
-# ⚡ SAFE CACHE ENGINE: १ मिनिटासाठी डेटा रॅममध्ये ठेवेल जेणेकरून याहू ब्लॉक करणार नाही
-@st.cache_data(ttl=60)
+# ⚡ LIVE मार्केटसाठी TTL कमी ठेवून सेफ डाऊनलोड फंक्शन
+@st.cache_data(ttl=15)
 def download_bulk_data(tickers_list, period_param):
-    tickers_string = " ".join(tickers_list)
-    df = yf.download(tickers=tickers_string, period=period_param, interval="1m", group_by='ticker', progress=False)
-    return df
+    try:
+        tickers_string = " ".join(tickers_list)
+        df = yf.download(tickers=tickers_string, period=period_param, interval="1m", group_by='ticker', progress=False)
+        return df
+    except Exception:
+        return None
 
 def scan_all_day_movements(df, live_mode=False):
     triggered_signals = []
@@ -82,23 +85,30 @@ st.sidebar.header("🕹️ Control Terminal")
 mode = st.sidebar.radio("Select Mode:", ["📅 Last Session History", "🔴 LIVE Market Tracker"])
 scan_btn = st.sidebar.button("⚡ Run Scanner", type="primary", use_container_width=True)
 
-# मुख्य रनिंग लॉजिक
 if scan_btn or mode == "🔴 LIVE Market Tracker":
     all_signals = []
     stock_counts = {}
     is_live = (mode == "🔴 LIVE Market Tracker")
     period_param = "1d" if is_live else "5d"
     
-    with st.spinner("⏳ Loading Universe Data Safely..."):
+    with st.spinner("⏳ LIVE Stream Active: Processing Non-F&O Universe..."):
         raw_data = download_bulk_data(TICKERS_POOL, period_param)
     
     if raw_data is not None and not raw_data.empty:
+        # मल्टि-इंडेक्स कॉलम्स सुरक्षितपणे चेक करणे
+        available_tickers = []
+        if isinstance(raw_data.columns, pd.MultiIndex):
+            available_tickers = raw_data.columns.get_level_values(0).unique()
+        else:
+            available_tickers = [raw_data.columns.name] if raw_data.columns.name in TICKERS_POOL else []
+
         for ticker in TICKERS_POOL:
             try:
-                if ticker in raw_data.columns.levels[0]:
+                if ticker in available_tickers:
                     data = raw_data[ticker].dropna()
                 else:
                     continue
+                    
                 if data.empty or len(data) < 25:
                     continue
                     
@@ -123,7 +133,7 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
                             "Raw_Index": sig["Raw_Index"]
                         })
             except Exception:
-                pass
+                pass  # एखादा विशिष्ट स्टॉक क्रॅश झाल्यास पूर्ण ॲप थांबणार नाही
         
         # --- डिस्प्ले रिझल्ट्स ---
         if all_signals:
@@ -149,7 +159,7 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
             st.markdown("---")
             st.subheader("📊 Chart Analysis Terminal")
             for index, row in df_signals.head(4).iterrows():
-                with st.expander(f"📈 {row['Stock']} - {row['Time (IST)']} (Price: {row['Price']})", expanded=True if index==0 else False):
+                with st.expander(f"📈 {row['Stock']} - {row['Time (IST)']} (Price: {row['Price']})", expanded=True if index==0 calibration_element else False):
                     df_slice = row['Full_Data'].iloc[max(0, row['Raw_Index'] - 15):min(len(row['Full_Data']), row['Raw_Index'] + 15)]
                     fig = go.Figure()
                     fig.add_trace(go.Candlestick(x=df_slice.index, open=df_slice['Open'], high=df_slice['High'], low=df_slice['Low'], close=df_slice['Close'], name='Price'))
@@ -157,13 +167,13 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
                     fig.update_layout(template="plotly_dark", yaxis=dict(title='Price'), yaxis2=dict(title='Volume', overlaying='y', side='right', showgrid=False), xaxis_rangeslider_visible=False, height=300)
                     st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No dynamic institutional breakouts found in this session.")
+            st.warning("No dynamic institutional breakouts found in this live session yet.")
     else:
-        st.error("Yahoo Finance कडून डेटा मिळाला नाही. २ सेकंद थांबा.")
+        st.error("LIVE डेटा स्ट्रीम तात्पुरती व्यस्त आहे किंवा Yahoo Finance कडून रिस्पॉन्स आला नाही. कृपया ५ सेकंद थांबा...")
 
-    # ⚡ इन-बिल्ट ऑटो-रिफ्रेश इंजिन (लायब्ररीशिवाय कडक ट्रॅकिंग)
+    # LIVE मोडमध्ये ३० सेकंदांचा सेफ पॉज देऊन पेज ऑटो-रिरन करणे
     if is_live:
-        time.sleep(30)  # दर ३० सेकंदांनी नवीन १-मिनिटाची कॅंडल चेक करेल
-        st.rerun()      # इन-बिल्ट फंक्शन सिस्टिमला रिफ्रेश करेल
+        time.sleep(30)
+        st.rerun()
 else:
     st.info("💡 स्कॅनर सुरू करण्यासाठी डाव्या बाजूला असलेल्या '⚡ Run Scanner' बटणावर क्लिक करा किंवा LIVE मोड निवडा.")
