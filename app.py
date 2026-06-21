@@ -4,216 +4,311 @@ import pandas as pd
 import plotly.graph_objects as go
 import time
 
-# --- Professional UI Configuration ---
-st.set_page_config(page_title="AlphaTracker | Institutional Scanner", layout="wide", page_icon="🏹")
+# --- ENTERPRISE THEME & STYLING ARCHITECTURE ---
+st.set_page_config(
+    page_title="AlphaTerminal | Institutional Block Scanner", 
+    layout="wide", 
+    page_icon="⚡"
+)
 
-# Custom CSS for Premium Dark/Modern Trading Dashboard look
+# Professional Web-Developer UI Style Customization (Clean, Fixed Grids, Corporate Dark Scheme)
 st.markdown("""
 <style>
-    .reportview-container { background: #0e1117; }
-    .stDeployButton { display:none; }
-    footer { visibility: hidden; }
-    .metric-box {
-        background-color: #1e222d;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 5px solid #00e676;
-        margin-bottom: 10px;
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #0c0f14 !important;
+        color: #d1d4dc !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .stDeployButton, footer, header { visibility: hidden !important; }
+    
+    /* Terminal Metric Layout Cards */
+    .metric-card {
+        background: #131722;
+        border: 1px solid #2a2e39;
+        border-radius: 6px;
+        padding: 16px;
+        margin-bottom: 12px;
+    }
+    .metric-title {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #787b86;
+        margin-bottom: 4px;
+    }
+    .metric-value {
+        font-size: 22px;
+        font-weight: 600;
+        color: #2962ff;
+    }
+    
+    /* Notification banner rules */
+    .alert-banner {
+        background: rgba(0, 230, 118, 0.1);
+        border: 1px solid #00e676;
+        padding: 12px;
+        border-radius: 4px;
+        color: #00e676;
+        font-weight: 500;
+        margin-bottom: 15px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏹 AlphaTracker: Live Institutional Block Order Scanner")
-st.caption("Tracks smart money algorithms, block trades, and institutional volume spikes on Nifty 50 constituents.")
+# --- APP HEADER ENGINE ---
+st.title("⚡ AlphaTerminal™")
+st.caption("Institutional Order Book Scanner • Target Universe: High-Momentum Dynamic Segments")
 
-# --- Verified Nifty 50 Ticker List ---
-NIFTY_50_STOCKS = [
-    "INFY.NS", "RELIANCE.NS", "BHARTIARTL.NS", "TCS.NS", "HDFCBANK.NS",
-    "BAJFINANCE.NS", "ICICIBANK.NS", "HCLTECH.NS", "ADANIENT.NS", "MM.NS", 
-    "MARUTI.NS", "SBIN.NS", "TECHM.NS", "ADANIPORTS.NS", "TRENT.NS",
-    "KOTAKBANK.NS", "WIPRO.NS", "NTPC.NS", "AXISBANK.NS",
-    "TATASTEEL.NS", "HINDALCO.NS", "LT.NS", "JIOFIN.NS", "INDIGO.NS",
-    "EICHERMOT.NS", "BEL.NS", "ULTRACEMCO.NS", "TITAN.NS", "ITC.NS",
-    "SUNPHARMA.NS", "HINDUNILVR.NS", "POWERGRID.NS", "APOLLOHOSP.NS",
-    "COALINDIA.NS", "SHRIRAMFIN.NS", "NESTLEIND.NS", "ASIANPAINT.NS",
-    "MAXHEALTH.NS", "CIPLA.NS", "ONGC.NS", "GRASIM.NS", "DRREDDY.NS",
-    "HDFCLIFE.NS", "BAJAJFINSV.NS", "JSWSTEEL.NS", "TATACONSUM.NS", "SBILIFE.NS"
+# --- CUSTOM DETAILED TICKER LIST MAP ---
+CUSTOM_TICKERS = [
+    "INFY.NS", "RELIANCE.NS", "BHARTIARTL.NS", "TCS.NS", "HDFCBANK.NS", "NIACL.NS", "IFCI.NS", "TARIL.NS", 
+    "AMBER.NS", "BAJFINANCE.NS", "NETWEB.NS", "ICICIBANK.NS", "COFORGE.NS", "HCLTECH.NS", "ADANIENT.NS", 
+    "TEJASNET.NS", "ADANIPOWER.NS", "MM.NS", "MARUTI.NS", "HSCL.NS", "SBIN.NS", "BHEL.NS", "ZEEL.NS", 
+    "SUZLON.NS", "TECHM.NS", "BSE.NS", "ADANIPORTS.NS", "TRENT.NS", "DATAPATTNS.NS", "BAJAJ-AUTO.NS", 
+    "MCX.NS", "PERSISTENT.NS", "KOTAKBANK.NS", "WIPRO.NS", "NTPC.NS", "DIXON.NS", "REDINGTON.NS", 
+    "AXISBANK.NS", "TATASTEEL.NS", "IDEA.NS", "OLECTRA.NS", "INDUSINDBK.NS", "HINDALCO.NS", "DMART.NS", 
+    "WAAREEENER.NS", "LT.NS", "HFCL.NS", "JIOFIN.NS", "INDIGO.NS", "LICI.NS", "EICHERMOT.NS", "SOLARINDS.NS", 
+    "VBL.NS", "POONAWALLA.NS", "BDL.NS", "POLYCAB.NS", "BEL.NS", "ULTRACEMCO.NS", "OLAELEC.NS", "VEDL.NS", 
+    "ADANIGREEN.NS", "SAMMAANCAP.NS", "BERGEPAINT.NS", "POWERINDIA.NS", "ABCAPITAL.NS", "CDSL.NS", 
+    "JYOTICNC.NS", "TITAN.NS", "NYKAA.NS", "ITC.NS", "SUNPHARMA.NS", "GRSE.NS", "ADANIENSOL.NS", 
+    "JBMA.NS", "AUROPHARMA.NS", "CGPOWER.NS", "HAL.NS", "RBLBANK.NS", "SAIL.NS", "BHARATFORG.NS", 
+    "BPCL.NS", "MUTHOOTFIN.NS", "YESBANK.NS", "PAGEIND.NS", "KAYNES.NS", "INDUSTOWER.NS", "ANGELONE.NS", 
+    "HINDUNILVR.NS", "ZENTEC.NS", "NATIONALUM.NS", "LAURUSLABS.NS", "TORNTPHARM.NS", "TVSMOTOR.NS", 
+    "GICRE.NS", "POWERGRID.NS", "JUBLFOOD.NS", "MOTHERSON.NS", "APOLLOHOSP.NS", "ICICIGI.NS", "RADICO.NS", 
+    "LUPIN.NS", "COALINDIA.NS", "CARBORUNIV.NS", "UPL.NS", "MPHASIS.NS", "DLF.NS", "SHRIRAMFIN.NS", 
+    "NESTLEIND.NS", "GMRAIRPORT.NS", "ATGL.NS", "DIVISLAB.NS", "FEDERALBNK.NS", "NAUKRI.NS", "ASHOKLEY.NS", 
+    "CRAFTSMAN.NS", "OFSS.NS", "NBCC.NS", "TATAELXSI.NS", "NLCINDIA.NS", "HINDPETRO.NS", "INDHOTEL.NS", 
+    "HEROMOTOCO.NS", "ASIANPAINT.NS", "BATAINDIA.NS", "IOC.NS", "MAXHEALTH.NS", "CANBK.NS", "AWL.NS", 
+    "TATACOMM.NS", "CHOLAFIN.NS", "GLENMARK.NS", "JSWENERGY.NS", "CIPLA.NS", "HINDZINC.NS", "UNIONBANK.NS", 
+    "KPITTECH.NS", "MAZDOCK.NS", "GAIL.NS", "APARINDS.NS", "NAM-INDIA.NS", "CUMMINSIND.NS", "IDBI.NS", 
+    "KEI.NS", "ICICIPRULI.NS", "ONGC.NS", "SCI.NS", "TATAPOWER.NS", "NMDC.NS", "360ONE.NS", "ABB.NS", 
+    "COCHINSHIP.NS", "PAYTM.NS", "FORCEMOT.NS", "INOXWIND.NS", "RRKABEL.NS", "GRASIM.NS", "BOSCHLTD.NS", 
+    "DRREDDY.NS", "STARHEALTH.NS", "BANDHANBNK.NS", "MARICO.NS", "NAVINFLUOR.NS", "HINDCOPPER.NS", 
+    "LODHA.NS", "WOCKPHARMA.NS", "HDFCLIFE.NS", "KALYANKJIL.NS", "BANKINDIA.NS", "JINDALSTEL.NS", 
+    "ENGINERSIN.NS", "PFC.NS", "PNB.NS", "FACT.NS", "AUBANK.NS", "BAJAJFINSV.NS", "JSWSTEEL.NS", 
+    "TATACONSUM.NS", "COROMANDEL.NS", "KPRMILL.NS", "BRITANNIA.NS", "GODREJCP.NS", "GRANULES.NS", 
+    "BANKBARODA.NS", "CARTRADE.NS", "LTF.NS", "PIDILITIND.NS", "RVNL.NS", "IDFCFIRSTB.NS", "VOLTAS.NS", 
+    "IRFC.NS", "MAHABANK.NS", "SIEMENS.NS", "INDIANB.NS", "JSWINFRA.NS", "SONACOMS.NS", "PRESTIGE.NS", 
+    "SYRMA.NS", "MANKIND.NS", "POLICYBZR.NS", "HDFCAMC.NS", "CGCL.NS", "FORTIS.NS", "SCHAEFFLER.NS", 
+    "TATATECH.NS", "PHOENIXLTD.NS", "USHAMART.NS", "GESHIP.NS", "KEC.NS", "RECLTD.NS", "UNITDSPR.NS", 
+    "BEML.NS", "KFINTECH.NS", "WELCORP.NS", "CAPLIPOINT.NS", "IIFL.NS", "MANAPPURAM.NS", "CAMS.NS", 
+    "OIL.NS", "ZYDUSLIFE.NS", "NHPC.NS", "APLAPOLLO.NS", "AMBUJACEM.NS", "WELSPUNLIV.NS", "NATCOPHARM.NS", 
+    "JINDALSAW.NS", "CHENNPETRO.NS", "RPOWER.NS", "MRPL.NS", "CHOICEIN.NS", "SRF.NS", "TIINDIA.NS", 
+    "AIAENG.NS", "ANANTRAJ.NS", "ITI.NS", "TITAGARH.NS", "MRF.NS", "BLUESTARCO.NS", "COLPAL.NS", 
+    "GODREJPROP.NS", "FIVESTAR.NS", "PATANJALI.NS", "DABUR.NS", "JPPOWER.NS", "HAVELLS.NS", "MOTILALOFS.NS", 
+    "DELHIVERY.NS", "CONCOR.NS", "BIOCON.NS", "SONATSOFTW.NS", "AEGISLOG.NS", "EIDPARRY.NS", "PCBL.NS", 
+    "GODFRYPHLP.NS", "PPLPHARMA.NS", "PIIND.NS", "ASTRAL.NS", "FLUOROCHEM.NS", "JSL.NS", "JBCHEPHARM.NS", 
+    "NUVAMA.NS", "KIRLOSENG.NS", "ASTERDM.NS", "SUPREMEIND.NS", "FINCABLES.NS", "SBILIFE.NS", "GLAND.NS", 
+    "PETRONET.NS", "TRITURBINE.NS", "KIMS.NS", "UNOMINDA.NS", "MFSL.NS", "BAJAJHLDNG.NS", "LICHSGFIN.NS", 
+    "TIMKEN.NS", "GLAXO.NS", "CENTRALBK.NS", "UBL.NS", "EXIDEIND.NS", "TORNTPOWER.NS", "KARURVYSYA.NS", 
+    "DEEPAKFERT.NS", "NEWGEN.NS", "HUDCO.NS", "NCC.NS", "M&MFIN.NS", "SUNDARMFIN.NS", "IREDA.NS", 
+    "LEMONTREE.NS", "J&KBANK.NS", "NH.NS", "SBICARD.NS", "ABREL.NS", "MMTC.NS", "ESCORTS.NS", 
+    "EMAMILTD.NS", "GMDCLTD.NS", "ZENSARTECH.NS", "ELGIEQUIP.NS", "DEVYANI.NS", "MSUMI.NS", "INTELLECT.NS", 
+    "NEULANDLAB.NS", "ALKEM.NS", "CROMPTON.NS", "JKTYRE.NS", "IGL.NS", "IPCALAB.NS", "CHALET.NS", 
+    "BLS.NS", "DEEPAKNTR.NS", "LATENTVIEW.NS", "SAREGAMA.NS", "SHYAMMETL.NS", "VTL.NS", "BHARTIHEXA.NS", 
+    "FSL.NS", "IRCTC.NS", "DALBHARAT.NS", "CONCORDBIO.NS", "LALPATHLAB.NS", "JMFINANCIL.NS", "ACE.NS", 
+    "ZFCVINDIA.NS", "SBFC.NS", "LINDEINDIA.NS", "AFFLE.NS", "PNBHOUSING.NS", "SHREECEM.NS", "BALRAMCHIN.NS", 
+    "GRAVITA.NS", "THERMAX.NS", "HONASA.NS", "ECLERX.NS", "BSOFT.NS", "TATAINVEST.NS", "SYNGENE.NS", 
+    "CHAMBLFERT.NS", "TATACHEM.NS", "CEATLTD.NS", "AARTIIND.NS", "IEX.NS", "GODREJIND.NS", "RAINBOW.NS", 
+    "LTTS.NS", "CYIENT.NS", "GPIL.NS", "APOLLOTYRE.NS", "INDIAMART.NS", "ELECON.NS", "MGL.NS", 
+    "BALKRISIND.NS", "NAVA.NS", "CHOLAHLDNG.NS", "BRIGADE.NS", "OBEROIRLTY.NS", "ARE&M.NS", "UCOBANK.NS", 
+    "GRAPHITE.NS", "TECHNOE.NS", "IRCON.NS", "SAPPHIRE.NS", "JWL.NS", "CRISIL.NS", "PVRINOX.NS", 
+    "CUB.NS", "IRB.NS", "JUBLINGREA.NS", "HONAUT.NS", "TRIDENT.NS", "APTUS.NS", "ACC.NS", "AAVAS.NS", 
+    "KAJARIACER.NS", "JKCEMENT.NS", "MINDACORP.NS", "CASTROLIND.NS", "ENDURANCE.NS", "MEDANTA.NS", 
+    "RAILTEL.NS", "HOMEFIRST.NS", "SIGNATURE.NS", "ABBOTINDIA.NS", "SJVN.NS", "ABFRL.NS", "HEG.NS", 
+    "CCL.NS", "LTFOODS.NS", "UTIAMC.NS", "BAYERCROP.NS", "TEGA.NS", "IOB.NS", "POLYMED.NS", 
+    "CREDITACC.NS", "CESC.NS", "MAPMYINDIA.NS", "AJANTPHARM.NS", "ATUL.NS", "SUNTV.NS", "ERIS.NS", 
+    "TTML.NS", "SARDAEN.NS", "SWANCORP.NS", "RKFORGE.NS", "BLUEDART.NS", "CIEINDIA.NS", "WHIRLPOOL.NS", 
+    "GALLANTT.NS", "RHIM.NS", "CANFINHOME.NS", "ZYDUSWELL.NS", "PFIZER.NS", "EIHOTEL.NS", "3MINDIA.NS", 
+    "BIKAJI.NS", "ASAHIINDIA.NS", "CLEAN.NS", "SOBHA.NS", "RITES.NS", "JUBLPHARMA.NS", "INDIACEM.NS", 
+    "NUVOCO.NS", "BBTC.NS", "RAMCOCEM.NS", "SUMICHEM.NS", "DCMSHRIRAM.NS"
 ]
 
-def convert_to_ist(df):
+def format_to_ist(df):
     if df.index.tz is None:
         df.index = df.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
     else:
         df.index = df.index.tz_convert('Asia/Kolkata')
     return df
 
-# --- Core Algorithm Logic ---
-def scan_institutional_engine(df, scan_mode):
-    triggered_signals = []
+# --- SCANNING LOGIC ARCHITECTURE ---
+def execute_algorithmic_scan(df, mode_selection):
+    signals = []
     if len(df) < 21:
-        return triggered_signals
+        return signals
 
-    # In Live Mode, we only watch the most recent closed candle. In History, we parse the whole day.
-    start_idx = len(df) - 1 if scan_mode == "🔴 Live Real-Time Scan" else 20
-    end_idx = len(df)
+    # Live Mode evaluates only the current closing candle. History evaluates the session timeline.
+    range_start = len(df) - 1 if mode_selection == "REAL-TIME SCALPER ENGINE" else 20
+    range_end = len(df)
 
-    for i in range(start_idx, end_idx):
-        current_candle = df.iloc[i]
-        current_volume = current_candle['Volume']
-        current_close = current_candle['Close']
-        current_time = df.index[i].strftime('%I:%M %p')
+    for i in range(range_start, range_end):
+        candle = df.iloc[i]
+        vol = candle['Volume']
+        close_p = candle['Close']
+        timestamp_str = df.index[i].strftime('%H:%M')
         
-        # Calculate Dry/Quiet Volume base over preceding 20 periods
-        prev_20_candles = df.iloc[i-20:i]
-        avg_dry_volume = prev_20_candles['Volume'].mean()
-        max_dry_volume = prev_20_candles['Volume'].max()
+        # Lookback analysis window
+        lookback_window = df.iloc[i-20:i]
+        base_avg_vol = lookback_window['Volume'].mean()
+        base_max_vol = lookback_window['Volume'].max()
         
-        # Smart Money Entry Condition (Dry consolidation broken by 4.5x average volume explosion)
-        if current_volume > (avg_dry_volume * 4.5) and current_volume > max_dry_volume:
-            triggered_signals.append({
-                "Time": current_time,
-                "Price": round(current_close, 2),
-                "Volume": int(current_volume),
-                "Avg_Dry_Vol": int(avg_dry_volume),
-                "Raw_Index": i
+        # Algorithmic Volume Spike Metric Constraint (4.5x lookback expansion)
+        if vol > (base_avg_vol * 4.5) and vol > base_max_vol:
+            signals.append({
+                "Time": timestamp_str,
+                "Price": round(close_p, 2),
+                "Volume": int(vol),
+                "Base_Avg": int(base_avg_vol),
+                "Index": i
             })
-            
-    return triggered_signals
+    return signals
 
-# --- JavaScript Alert Injector (Audio + Modal Popup) ---
-def trigger_popup_alert(stock_name, price, time_str):
-    # Triggers a browser native alert box and plays a notification sound instantly
-    popup_html = f"""
+# --- BROWSER JS WEB AUDIO INTERACTION INJECTOR ---
+def trigger_terminal_popup(stock_symbol, execution_price, alert_time):
+    # Web-API Native Audio Pipeline Execution & Non-blocking Dialog Window Trigger
+    javascript_payload = f"""
     <script>
-        var audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
-        audio.play();
-        alert('🚨 INSTITUTIONAL ACTIVITY DETECTED!\\n\\nStock: {stock_name}\\nPrice: ₹{price}\\nTime: {time_str}');
+        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var oscillator = audioCtx.createOscillator();
+        var gainNode = audioCtx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // High sharp alarm frequency
+        gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        setTimeout(function() {{ oscillator.stop(); }}, 350);
+        
+        alert('🚨 ALPHA SYSTEM ALERT\\n\\nInstitutional Order Block Captured\\nTicker: {stock_symbol}\\nPrice: INR {execution_price}\\nTimestamp: {alert_time}');
     </script>
     """
-    st.components.v1.html(popup_html, height=0, width=0)
+    st.components.v1.html(javascript_payload, height=0, width=0)
 
-# --- Sidebar UI Controls ---
-st.sidebar.image("https://img.icons8.com/nolan/64/bullish.png", width=50)
-st.sidebar.title("AlphaTracker Controls")
-selected_mode = st.sidebar.radio("Select Operational Mode:", ["🔴 Live Real-Time Scan", "📅 Last Trading Session History"])
-refresh_interval = st.sidebar.slider("Live Auto-Refresh Rate (Seconds):", 15, 60, 30) if selected_mode == "🔴 Live Real-Time Scan" else None
-execute_scan = st.sidebar.button("⚡ Start Scanning Engine", type="primary")
+# --- TERMINAL CONTROL INTERFACE (SIDEBAR) ---
+st.sidebar.markdown("### TERMINAL ENGINE CONFIG")
+selected_engine = st.sidebar.radio(
+    "Operational State", 
+    ["REAL-TIME SCALPER ENGINE", "HISTORICAL TIMELINE ANALYSIS"]
+)
+loop_interval = st.sidebar.slider("Dynamic Frame Throttle (Seconds)", 10, 60, 20) if selected_engine == "REAL-TIME SCALPER ENGINE" else None
+activation_trigger = st.sidebar.button("INITIALIZE CORE INSTANCES", type="primary", use_container_width=True)
 
-# --- Scanning Engine Thread execution ---
-if execute_scan or selected_mode == "🔴 Live Real-Time Scan":
+# --- ENGINE LOGIC EXECUTION RUNTIME ---
+if activation_trigger or selected_engine == "REAL-TIME SCALPER ENGINE":
     
-    # Simple placeholder wrapper for real-time looping
     while True:
-        all_signals = []
-        stock_counts = {}
+        aggregated_signals = []
+        rank_distribution = {}
         
-        if selected_mode == "🔴 Live Real-Time Scan":
-            st.toast("🔄 Refreshing Live Engine... Fetching latest ticks.", icon="🚀")
-            period_param = "1d"
+        if selected_engine == "REAL-TIME SCALPER ENGINE":
+            st.toast("Re-indexing real-time order books...", icon="🔄")
+            data_scope = "1d"
         else:
-            st.info("📊 Fetching historical data pipeline. Please wait...")
-            period_param = "5d"
+            st.info("Parsing downstream history arrays. Compiling metrics...")
+            data_scope = "5d"
 
-        # Bulk asynchronous-like download to optimize Streamlit cloud speed
-        tickers_str = " ".join(NIFTY_50_STOCKS)
-        raw_data = yf.download(tickers=tickers_str, period=period_param, interval="1m", group_by='ticker', progress=False)
+        # Consolidated Async-Mimic Download Matrix
+        string_payload = " ".join(CUSTOM_TICKERS)
+        raw_feed = yf.download(tickers=string_payload, period=data_scope, interval="1m", group_by='ticker', progress=False)
         
-        for ticker in NIFTY_50_STOCKS:
+        for ticker in CUSTOM_TICKERS:
             try:
-                if ticker in raw_data.columns.levels[0]:
-                    data = raw_data[ticker].dropna()
+                if ticker in raw_feed.columns.levels[0]:
+                    ticker_frame = raw_feed[ticker].dropna()
                 else:
                     continue
                     
-                if data.empty or len(data) < 25:
+                if ticker_frame.empty or len(ticker_frame) < 25:
                     continue
                     
-                data = convert_to_ist(data)
+                ticker_frame = format_to_ist(ticker_frame)
                 
-                # Filter specifically down to Friday / Last trading day
-                all_days = data.index.normalize().unique()
-                if len(all_days) >= 1:
-                    data = data[data.index.normalize() == all_days[-1]]
+                # Filter down exclusively to the active or latest complete exchange calendar day
+                calendar_ticks = ticker_frame.index.normalize().unique()
+                if len(calendar_ticks) >= 1:
+                    ticker_frame = ticker_frame[ticker_frame.index.normalize() == calendar_ticks[-1]]
                 
-                signals = scan_institutional_engine(data, selected_mode)
+                detected_instances = execute_algorithmic_scan(ticker_frame, selected_engine)
                 
-                if signals:
-                    s_name = ticker.replace(".NS", "")
-                    stock_counts[s_name] = len(signals)
+                if detected_instances:
+                    clean_symbol = ticker.replace(".NS", "")
+                    rank_distribution[clean_symbol] = len(detected_instances)
                     
-                    for sig in signals:
-                        all_signals.append({
-                            "Stock": s_name,
-                            "Time (IST)": sig["Time"],
-                            "Execution Price": sig["Price"],
-                            "Institutional Volume": sig["Volume"],
-                            "Avg Base Vol (20m)": sig["Avg_Dry_Vol"],
-                            "Full_Data": data,
-                            "Raw_Index": sig["Raw_Index"]
+                    for instance in detected_instances:
+                        aggregated_signals.append({
+                            "Ticker": clean_symbol,
+                            "Timestamp (IST)": instance["Time"],
+                            "Price (INR)": instance["Price"],
+                            "Volume Metric": instance["Volume"],
+                            "Historical Base Vol": instance["Base_Avg"],
+                            "Context_Data": ticker_frame,
+                            "Index_Pos": instance["Index"]
                         })
             except Exception:
                 pass
         
-        # --- Handle Triggered Results ---
-        if all_signals:
-            df_signals = pd.DataFrame(all_signals)
-            df_signals['Time_Obj'] = pd.to_datetime(df_signals['Time (IST)'], format='%I:%M %p')
-            df_signals = df_signals.sort_values(by='Time_Obj', ascending=False) # Latest at the top
+        # --- UI LAYOUT MATRIX RENDERER ---
+        if aggregated_signals:
+            df_signals = pd.DataFrame(aggregated_signals)
+            df_signals['Time_Sort'] = pd.to_datetime(df_signals['Timestamp (IST)'], format='%H:%M')
+            df_signals = df_signals.sort_values(by='Time_Sort', ascending=False)
             
-            # 🚨 TRIGGER POPUP & SOUND FOR LIVE ALERTS
-            if selected_mode == "🔴 Live Real-Time Scan":
-                latest_alert = df_signals.iloc[0]
-                st.balloons() # Visual on-screen celebration
-                trigger_popup_alert(latest_alert['Stock'], latest_alert['Execution Price'], latest_alert['Time (IST)'])
-                st.error(f"🚨 LIVE ALERT: Institutional block order execution detected in {latest_alert['Stock']} at ₹{latest_alert['Execution Price']}!")
+            # POPUP PIPELINE EXECUTION FOR LIVE INSTANCES
+            if selected_engine == "REAL-TIME SCALPER ENGINE":
+                latest_hit = df_signals.iloc[0]
+                trigger_terminal_popup(latest_hit['Ticker'], latest_hit['Price (INR)'], latest_hit['Timestamp (IST)'])
+                st.markdown(f"<div class='alert-banner'>⚠️ INSTANT BLOCK TRADING ALERT: Institutional positioning verified on {latest_hit['Ticker']} at Price ₹{latest_hit['Price (INR)']} ({latest_hit['Timestamp (IST)']})</div>", unsafe_allow_html=True)
             
-            # --- PROFESSIONAL UI BREAKDOWN ---
-            col_metrics, col_table = st.columns([1, 3])
+            # Layout Distribution Terminal Panels
+            panel_left, panel_right = st.columns([1, 3])
             
-            with col_metrics:
-                st.subheader("💡 Volume Rank")
-                df_counts = pd.DataFrame(list(stock_counts.items()), columns=["Stock", "Frequency"]).sort_values(by="Frequency", ascending=False)
-                st.dataframe(df_counts, hide_index=True, use_container_width=True)
+            with panel_left:
+                st.markdown("<div class='metric-title'>Volatility Spike Density</div>", unsafe_allow_html=True)
+                df_rank = pd.DataFrame(list(rank_distribution.items()), columns=["Asset", "Frequency"]).sort_values(by="Frequency", ascending=False)
+                st.dataframe(df_rank, hide_index=True, use_container_width=True)
                 
-            with col_table:
-                st.subheader("📋 Active Signals Terminal")
-                df_display = df_signals[["Time (IST)", "Stock", "Execution Price", "Institutional Volume", "Avg Base Vol (20m)"]]
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
+            with panel_right:
+                st.markdown("<div class='metric-title'>Live Core Signals Array</div>", unsafe_allow_html=True)
+                df_terminal_view = df_signals[["Timestamp (IST)", "Ticker", "Price (INR)", "Volume Metric", "Historical Base Vol"]]
+                st.dataframe(df_terminal_view, use_container_width=True, hide_index=True)
                 
-            # --- GRAPHING GALLERY ---
-            st.markdown("---")
-            st.subheader("📊 Interactive Execution Visuals")
-            for index, row in df_signals.head(5).iterrows():
-                with st.expander(f"📈 Chart Studio - {row['Stock']} at {row['Time (IST)']}"):
-                    df_chart_all = row['Full_Data']
-                    idx = row['Raw_Index']
+            # --- PROFESSIONAL INTEGRATED PLOTLY CORE GRAPHICS ---
+            st.markdown("### 📊 Array Visualizer Terminal")
+            for index, row in df_signals.head(4).iterrows():
+                with st.expander(f"📊 Tracking Array Stream: {row['Ticker']} @ {row['Timestamp (IST)']}", expanded=True if index==0 else False):
+                    source_matrix = row['Context_Data']
+                    target_pos = row['Index_Pos']
                     
-                    df_slice = df_chart_all.iloc[max(0, idx - 20):min(len(df_chart_all), idx + 15)]
+                    chart_slice = source_matrix.iloc[max(0, target_pos - 15):min(len(source_matrix), target_pos + 15)]
                     
                     fig = go.Figure()
                     fig.add_trace(go.Candlestick(
-                        x=df_slice.index, open=df_slice['Open'], high=df_slice['High'],
-                        low=df_slice['Low'], close=df_slice['Close'], name='Price action'
+                        x=chart_slice.index, open=chart_slice['Open'], high=chart_slice['High'],
+                        low=chart_slice['Low'], close=chart_slice['Close'], name='Market Price'
                     ))
                     fig.add_trace(go.Bar(
-                        x=df_slice.index, y=df_slice['Volume'], name='Smart Money Volume',
-                        yaxis='y2', opacity=0.4, marker_color='#00e676'
+                        x=chart_slice.index, y=chart_slice['Volume'], name='Institutional Tracking Volume',
+                        yaxis='y2', opacity=0.35, marker_color='#00e676'
                     ))
                     fig.update_layout(
                         template="plotly_dark",
-                        yaxis=dict(title='Price (₹)'),
-                        yaxis2=dict(title='Volume', overlaying='y', side='right'),
+                        paper_bgcolor="#131722",
+                        plot_bgcolor="#131722",
+                        yaxis=dict(title='Price (INR)', gridcolor="#2a2e39"),
+                        yaxis2=dict(title='Volume Units', overlaying='y', side='right', showgrid=False),
+                        xaxis=dict(gridcolor="#2a2e39"),
+                        margin=dict(l=40, r=40, t=10, b=10),
                         xaxis_rangeslider_visible=False,
-                        margin=dict(l=20, r=20, t=30, b=20)
+                        height=320
                     )
                     st.plotly_chart(fig, use_container_width=True)
             break
         else:
-            if selected_mode != "🔴 Live Real-Time Scan":
-                st.warning("No significant institutional anomalies found matching the current metric constraints.")
+            if selected_engine != "REAL-TIME SCALPER ENGINE":
+                st.warning("No structural institutional volume spikes matching profile conditions found inside the array footprint.")
                 break
                 
-        # Handle live mode loop delay execution
-        if selected_mode == "🔴 Live Real-Time Scan":
-            time.sleep(refresh_interval)
+        # Handle dynamic page repaint timing adjustments
+        if selected_engine == "REAL-TIME SCALPER ENGINE":
+            time.sleep(loop_interval)
             st.rerun()
