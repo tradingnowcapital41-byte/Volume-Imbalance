@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 # --- Professional UI Config (Bloomberg Style) ---
 st.set_page_config(page_title="AlphaTracker | Financial Terminal", layout="wide")
@@ -18,7 +19,7 @@ st.markdown("""
 st.title("🏹 AlphaTracker™ Terminal")
 st.caption("Professional Institutional Scanner for High-Momentum Stocks")
 
-# --- तुमची संपूर्ण नवीन Nifty 500 + SmallCap शेअर्सची लिस्ट ---
+# --- TICKERS POOL ---
 TICKERS_POOL = [
     "INFY.NS", "RELIANCE.NS", "BHARTIARTL.NS", "TCS.NS", "HDFCBANK.NS", "NIACL.NS", "IFCI.NS", "TARIL.NS", 
     "AMBER.NS", "BAJFINANCE.NS", "NETWEB.NS", "ICICIBANK.NS", "COFORGE.NS", "HCLTECH.NS", "ADANIENT.NS", 
@@ -90,13 +91,11 @@ def convert_to_ist(df):
         df.index = df.index.tz_convert('Asia/Kolkata')
     return df
 
-# --- मूळ अचूक कोर लॉजिक ---
 def scan_all_day_movements(df, live_mode=False):
     triggered_signals = []
     if len(df) < 21:
         return triggered_signals
 
-    # जर लाईव्ह मोड असेल तर फक्त शेवटची कॅंडल तपासेल, नाहीतर पूर्ण दिवसाचा इतिहास काढेल
     start_idx = len(df) - 1 if live_mode else 20
     for i in range(start_idx, len(df)):
         current_candle = df.iloc[i]
@@ -118,7 +117,16 @@ def scan_all_day_movements(df, live_mode=False):
             })
     return triggered_signals
 
-# --- Browser Audio/Popup Code ---
+# single ticker साठी वेगवान सिम्पल फेचिंग फंक्शन
+def fetch_single_ticker_data(ticker, period_param):
+    try:
+        df = yf.download(tickers=ticker, period=period_param, interval="1m", progress=False)
+        if not df.empty and len(df) >= 25:
+            return ticker, df
+    except Exception:
+        pass
+    return ticker, None
+
 def trigger_popup_alert(stock_name, price, time_str):
     popup_html = f"""
     <script>
@@ -134,12 +142,11 @@ def trigger_popup_alert(stock_name, price, time_str):
     """
     st.components.v1.html(popup_html, height=0, width=0)
 
-# --- Sidebar UI Controls ---
+# --- Sidebar Controls ---
 st.sidebar.header("🕹️ Control Terminal")
 mode = st.sidebar.radio("Select Mode:", ["📅 Last Session History", "🔴 LIVE Market Tracker"])
 scan_btn = st.sidebar.button("⚡ Start Terminal Scanner", type="primary", use_container_width=True)
 
-# --- मेन रनटाइम इंजिन ---
 if scan_btn or mode == "🔴 LIVE Market Tracker":
     
     while True:
@@ -149,27 +156,24 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
         is_live = (mode == "🔴 LIVE Market Tracker")
         period_param = "1d" if is_live else "5d"
         
-        if is_live:
-            st.toast("🔄 Live Feed Refreshing...", icon="🚀")
-        else:
-            st.info("📊 Fetching Complete Session History... Please wait...")
+        status_msg = st.empty()
+        status_msg.info("⚡ Parallel Engine Active: Downloading Nifty 500 stocks concurrently...")
 
-        # Bulk Download (मूळ पहिल्या कोडसारखं वेगवान)
-        tickers_string = " ".join(TICKERS_POOL)
-        raw_data = yf.download(tickers=tickers_string, period=period_param, interval="1m", group_by='ticker', progress=False)
-        
-        for ticker in TICKERS_POOL:
+        # ⚡ MULTITHREADING ENGINE (एकाच वेळी २० थ्रेड्स पॅरेलल डेटा खेचतील - सुपरफास्ट)
+        downloaded_results = {}
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = [executor.submit(fetch_single_ticker_data, ticker, period_param) for ticker in TICKERS_POOL]
+            for fut in futures:
+                t, res_df = fut.result()
+                if res_df is not None:
+                    downloaded_results[t] = res_df
+
+        status_msg.empty() # प्रोग्रेस मेसेज काढून टाका
+
+        # डाउनलोड झालेल्या डेटावर स्कॅनिंग सुरू
+        for ticker, data in downloaded_results.items():
             try:
-                if ticker in raw_data.columns.levels[0]:
-                    data = raw_data[ticker].dropna()
-                else:
-                    continue
-                if data.empty or len(data) < 25:
-                    continue
-                    
                 data = convert_to_ist(data)
-                
-                # शेवटचा ट्रेडिंग दिवस फिल्टर करणे
                 all_days = data.index.normalize().unique()
                 if len(all_days) >= 1:
                     data = data[data.index.normalize() == all_days[-1]]
@@ -197,9 +201,8 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
         if all_signals:
             df_signals = pd.DataFrame(all_signals)
             df_signals['Time_Obj'] = pd.to_datetime(df_signals['Time (IST)'], format='%I:%M %p')
-            df_signals = df_signals.sort_values(by='Time_Obj', ascending=False) # नवीन सिग्नल सर्वात वर
+            df_signals = df_signals.sort_values(by='Time_Obj', ascending=False)
             
-            # जर लाईव्ह असेल तर थेट पॉपअप मारा
             if is_live:
                 latest = df_signals.iloc[0]
                 trigger_popup_alert(latest['Stock'], latest['Price'], latest['Time (IST)'])
@@ -216,7 +219,6 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
                 df_display = df_signals[["Time (IST)", "Stock", "Price", "Volume", "Avg Dry Vol"]]
                 st.dataframe(df_display, use_container_width=True, hide_index=True)
                 
-            # चार्ट्स
             st.markdown("---")
             st.subheader("📊 Chart Analysis Terminal")
             for index, row in df_signals.head(4).iterrows():
@@ -234,5 +236,5 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
                 break
                 
         if is_live:
-            time.sleep(25) # लाईव्ह मोडमध्ये २५ सेकंदांनी ऑटोमॅटिकली रीफ्रेश होईल
+            time.sleep(20)
             st.rerun()
