@@ -11,7 +11,6 @@ st.set_page_config(
     page_icon="⚡"
 )
 
-# Professional Web-Developer UI Style Customization (Clean, Fixed Grids, Corporate Dark Scheme)
 st.markdown("""
 <style>
     html, body, [data-testid="stAppViewContainer"] {
@@ -20,15 +19,6 @@ st.markdown("""
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     .stDeployButton, footer, header { visibility: hidden !important; }
-    
-    /* Terminal Metric Layout Cards */
-    .metric-card {
-        background: #131722;
-        border: 1px solid #2a2e39;
-        border-radius: 6px;
-        padding: 16px;
-        margin-bottom: 12px;
-    }
     .metric-title {
         font-size: 11px;
         text-transform: uppercase;
@@ -36,13 +26,6 @@ st.markdown("""
         color: #787b86;
         margin-bottom: 4px;
     }
-    .metric-value {
-        font-size: 22px;
-        font-weight: 600;
-        color: #2962ff;
-    }
-    
-    /* Notification banner rules */
     .alert-banner {
         background: rgba(0, 230, 118, 0.1);
         border: 1px solid #00e676;
@@ -55,11 +38,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- APP HEADER ENGINE ---
 st.title("⚡ AlphaTerminal™")
 st.caption("Institutional Order Book Scanner • Target Universe: High-Momentum Dynamic Segments")
 
-# --- CUSTOM DETAILED TICKER LIST MAP ---
+# --- TICKER LIST ---
 CUSTOM_TICKERS = [
     "INFY.NS", "RELIANCE.NS", "BHARTIARTL.NS", "TCS.NS", "HDFCBANK.NS", "NIACL.NS", "IFCI.NS", "TARIL.NS", 
     "AMBER.NS", "BAJFINANCE.NS", "NETWEB.NS", "ICICIBANK.NS", "COFORGE.NS", "HCLTECH.NS", "ADANIENT.NS", 
@@ -131,13 +113,11 @@ def format_to_ist(df):
         df.index = df.index.tz_convert('Asia/Kolkata')
     return df
 
-# --- SCANNING LOGIC ARCHITECTURE ---
 def execute_algorithmic_scan(df, mode_selection):
     signals = []
     if len(df) < 21:
         return signals
 
-    # Clean alignment to pull entire session data for chronological tracking
     range_start = len(df) - 1 if mode_selection == "REAL-TIME SCALPER ENGINE" else 20
     range_end = len(df)
 
@@ -147,12 +127,10 @@ def execute_algorithmic_scan(df, mode_selection):
         close_p = candle['Close']
         timestamp_str = df.index[i].strftime('%H:%M')
         
-        # Lookback analysis window
         lookback_window = df.iloc[i-20:i]
         base_avg_vol = lookback_window['Volume'].mean()
         base_max_vol = lookback_window['Volume'].max()
         
-        # Volume Spike Constraint
         if vol > (base_avg_vol * 4.5) and vol > base_max_vol:
             signals.append({
                 "Time": timestamp_str,
@@ -163,7 +141,6 @@ def execute_algorithmic_scan(df, mode_selection):
             })
     return signals
 
-# --- BROWSER JS WEB AUDIO INTERACTION INJECTOR ---
 def trigger_terminal_popup(stock_symbol, execution_price, alert_time):
     javascript_payload = f"""
     <script>
@@ -183,7 +160,7 @@ def trigger_terminal_popup(stock_symbol, execution_price, alert_time):
     """
     st.components.v1.html(javascript_payload, height=0, width=0)
 
-# --- TERMINAL CONTROL INTERFACE (SIDEBAR) ---
+# --- SIDEBAR INTERFACE ---
 st.sidebar.markdown("### TERMINAL ENGINE CONFIG")
 selected_engine = st.sidebar.radio(
     "Operational State", 
@@ -192,59 +169,73 @@ selected_engine = st.sidebar.radio(
 loop_interval = st.sidebar.slider("Dynamic Frame Throttle (Seconds)", 10, 60, 20) if selected_engine == "REAL-TIME SCALPER ENGINE" else None
 activation_trigger = st.sidebar.button("INITIALIZE CORE INSTANCES", type="primary", use_container_width=True)
 
-# --- ENGINE LOGIC EXECUTION RUNTIME ---
 if activation_trigger or selected_engine == "REAL-TIME SCALPER ENGINE":
     
     while True:
         aggregated_signals = []
         rank_distribution = {}
-        
-        # Fixed: Changed "5d" to "7d" to cleanly fetch historical data even after long weekends/holidays.
         data_scope = "1d" if selected_engine == "REAL-TIME SCALPER ENGINE" else "7d"
         
         if selected_engine == "REAL-TIME SCALPER ENGINE":
             st.toast("Re-indexing real-time order books...", icon="🔄")
         else:
-            st.info("Parsing downstream history arrays. Compiling metrics...")
+            st.info("Parsing downstream history arrays in optimized chunks...")
 
-        string_payload = " ".join(CUSTOM_TICKERS)
-        raw_feed = yf.download(tickers=string_payload, period=data_scope, interval="1m", group_by='ticker', progress=False)
+        # ⚡ CHUNKING MECHANISM: Processing 40 stocks at a time to prevent crashes
+        chunk_size = 40
+        progress_bar = st.progress(0)
         
-        for ticker in CUSTOM_TICKERS:
-            try:
-                if ticker in raw_feed.columns.levels[0]:
-                    ticker_frame = raw_feed[ticker].dropna()
-                else:
-                    continue
+        for chunk_idx in range(0, len(CUSTOM_TICKERS), chunk_size):
+            current_chunk = CUSTOM_TICKERS[chunk_idx : chunk_idx + chunk_size]
+            string_payload = " ".join(current_chunk)
+            
+            # Direct dynamic download
+            raw_feed = yf.download(tickers=string_payload, period=data_scope, interval="1m", group_by='ticker', progress=False)
+            
+            for ticker in current_chunk:
+                try:
+                    # Clean multi-index data mapping execution
+                    if len(current_chunk) == 1:
+                        ticker_frame = raw_feed.dropna()
+                    elif ticker in raw_feed.columns.levels[0]:
+                        ticker_frame = raw_feed[ticker].dropna()
+                    else:
+                        continue
+                        
+                    if ticker_frame.empty or len(ticker_frame) < 25:
+                        continue
+                        
+                    ticker_frame = format_to_ist(ticker_frame)
                     
-                if ticker_frame.empty or len(ticker_frame) < 25:
-                    continue
+                    calendar_ticks = ticker_frame.index.normalize().unique()
+                    if len(calendar_ticks) >= 1:
+                        # Extract the exact final active trading session data array
+                        ticker_frame = ticker_frame[ticker_frame.index.normalize() == calendar_ticks[-1]]
                     
-                ticker_frame = format_to_ist(ticker_frame)
-                
-                # Dynamic Check: Pulls the absolute last active calendar session present in the downloaded data structure
-                calendar_ticks = ticker_frame.index.normalize().unique()
-                if len(calendar_ticks) >= 1:
-                    ticker_frame = ticker_frame[ticker_frame.index.normalize() == calendar_ticks[-1]]
-                
-                detected_instances = execute_algorithmic_scan(ticker_frame, selected_engine)
-                
-                if detected_instances:
-                    clean_symbol = ticker.replace(".NS", "")
-                    rank_distribution[clean_symbol] = len(detected_instances)
+                    detected_instances = execute_algorithmic_scan(ticker_frame, selected_engine)
                     
-                    for instance in detected_instances:
-                        aggregated_signals.append({
-                            "Ticker": clean_symbol,
-                            "Timestamp (IST)": instance["Time"],
-                            "Price (INR)": instance["Price"],
-                            "Volume Metric": instance["Volume"],
-                            "Historical Base Vol": instance["Base_Avg"],
-                            "Context_Data": ticker_frame,
-                            "Index_Pos": instance["Index"]
-                        })
-            except Exception:
-                pass
+                    if detected_instances:
+                        clean_symbol = ticker.replace(".NS", "")
+                        rank_distribution[clean_symbol] = rank_distribution.get(clean_symbol, 0) + len(detected_instances)
+                        
+                        for instance in detected_instances:
+                            aggregated_signals.append({
+                                "Ticker": clean_symbol,
+                                "Timestamp (IST)": instance["Time"],
+                                "Price (INR)": instance["Price"],
+                                "Volume Metric": instance["Volume"],
+                                "Historical Base Vol": instance["Base_Avg"],
+                                "Context_Data": ticker_frame,
+                                "Index_Pos": instance["Index"]
+                            })
+                except Exception:
+                    pass
+            
+            # Update progress safely
+            progress_percent = min((chunk_idx + chunk_size) / len(CUSTOM_TICKERS), 1.0)
+            progress_bar.progress(progress_percent)
+            
+        progress_bar.empty() # Remove progress bar once finished
         
         # --- UI LAYOUT MATRIX RENDERER ---
         if aggregated_signals:
