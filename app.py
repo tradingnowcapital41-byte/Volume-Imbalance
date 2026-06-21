@@ -3,20 +3,19 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-import pytz
 
 # Page Configuration
-st.set_page_config(page_title="Volume Breakout Scanner & History", layout="wide")
-st.title("📈 Nifty 500 Volume Breakout: Live & Friday History")
+st.set_page_config(page_title="Day High Volume Breakout Scanner", layout="wide")
+st.title("🚀 Day High + Volume Breakout Scanner (1-Min TF)")
+st.write("लॉजिक: आधी वॉल्यूमसह Day High बनणार -> मग शांत होणार -> पुन्हा तो Day High मोठ्या वॉल्यूमने ब्रेक होणार!")
 
-# --- Nifty 500 चे काही प्रातिनिधिक स्टॉक्स (इथे पूर्ण ५०० स्टॉक्सची लिस्ट जोडा) ---
+# --- Nifty 500 चे काही प्रातिनिधिक स्टॉक्स ---
 NIFTY_500_TICKERS = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
     "TATAMOTORS.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "BAJFINANCE.NS",
     "WIPRO.NS", "HCLTECH.NS", "SUNPHARMA.NS", "NTPC.NS", "ADANIENT.NS"
 ]
 
-# --- भारतीय वेळेनुसार (IST) रूपांतरित करणारे फंक्शन ---
 def convert_to_ist(df):
     if df.index.tz is None:
         df.index = df.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
@@ -24,124 +23,116 @@ def convert_to_ist(df):
         df.index = df.index.tz_convert('Asia/Kolkata')
     return df
 
-# --- लॉजिक फंक्शन (इतिहास शोधण्यासाठी आणि लाईव्हसाठी) ---
-def scan_stock_data(df, is_history_mode=False):
+# --- कोर लॉजिक फंक्शन ---
+def scan_day_high_breakout(df, is_history_mode=False):
     triggered_signals = []
     if len(df) < 31:
         return triggered_signals
 
-    # जर हिस्ट्री मोड असेल तर पूर्ण दिवसाच्या प्रत्येक कॅंडलवर लूप फिरवून ब्रेकआउट शोधू
-    # जर लाईव्ह मोड असेल तर फक्त शेवटच्या (लेटेस्ट) कॅंडलवर लक्ष ठेवू
+    # सुरवातीला किमान ३० मिनिटांचा डेटा सोडून पुढे तपासू जेणेकरून एक बेस Day High तयार झालेला असेल
     start_idx = 30 if is_history_mode else len(df) - 1
     end_idx = len(df)
 
     for i in range(start_idx, end_idx):
         current_candle = df.iloc[i]
+        current_close = current_candle['Close']
         current_volume = current_candle['Volume']
-        current_time = df.index[i].strftime('%I:%M %p') # वेळेचे स्वरूप: 11:30 AM
+        current_time = df.index[i].strftime('%I:%M %p')
         
-        # मागच्या ३० कॅंडल्सचा डेटा (Rolling window)
-        prev_candles = df.iloc[i-30:i]
-        prev_volumes = prev_candles['Volume']
+        # १. चालू कॅंडलच्या आधीचा संपूर्ण दिवसाचा डेटा (इथून आपण आधीचा Day High आणि Max Volume काढणार)
+        past_day_data = df.iloc[:i]
         
-        avg_volume = prev_volumes.tail(20).mean()
-        highest_recent_volume = prev_volumes.max()
+        prev_day_high = past_day_data['High'].max()
+        prev_max_volume = past_day_data['Volume'].max()
+        avg_volume_20 = past_day_data['Volume'].tail(20).mean()
         
-        # तुमचे लॉजिक: अचानक वॉल्यूम ३ पट पेक्षा जास्त वाढला आणि मागच्या ३० मिनिटांतील सर्वोच्च वॉल्यूम तोडला
-        if current_volume > (avg_volume * 3) and current_volume > highest_recent_volume:
+        # २. लॉजिक चेक्स:
+        # क) चालू क्लोजिंगने मागचा Day High तोडला पाहिजे (Day High Breakout)
+        is_price_breakout = current_close > prev_day_high
+        
+        # ख) चालू वॉल्यूम हा मागच्या सर्वोच्च वॉल्यूपेक्षा जास्त पाहिजे आणि सरासरीपेक्षा किमान ३ पट पाहिजे
+        is_volume_breakout = (current_volume > prev_max_volume) and (current_volume > (avg_volume_20 * 3))
+        
+        if is_price_breakout and is_volume_breakout:
             triggered_signals.append({
                 "Time": current_time,
-                "Price": round(current_candle['Close'], 2),
-                "Volume": int(current_volume),
-                "Avg Vol (20)": int(avg_volume),
-                "Raw_Index": i # चार्ट बनवण्यासाठी इंडेक्स लक्षात ठेवणे
+                "Price": round(current_close, 2),
+                "Prev Day High": round(prev_day_high, 2),
+                "Breakout Volume": int(current_volume),
+                "Prev Max Volume": int(prev_max_volume),
+                "Raw_Index": i
             })
             
     return triggered_signals
 
-# --- Sidebar UI Settings ---
-st.sidebar.header("🕹️ Scanner Controls")
+# --- Sidebar UI ---
+st.sidebar.header("🕹️ Controls")
 mode = st.sidebar.radio("स्कॅनर मोड निवडा:", ["🔴 Live Scan (Latest Candle)", "📅 Friday History (Full Day)"])
 scan_btn = st.sidebar.button("🔍 Start Scanning", type="primary")
 
-# --- मुख्य स्कॅनिंग प्रोसेस ---
 if scan_btn:
     triggered_stocks = []
+    period_param = "1d" if mode == "🔴 Live Scan (Latest Candle)" else "5d"
     
-    if mode == "🔴 Live Scan (Latest Candle)":
-        st.info("चालू लाईव्ह मार्केटचा डेटा स्कॅन होत आहे...")
-        period_param = "1d"
-    else:
-        st.info("गेल्या शुक्रवारचा (Last Trading Session) पूर्ण १-मिनिटाचा डेटा तपासला जात आहे...")
-        # शुक्रवारचा डेटा मिळवण्यासाठी '5d' किंवा '2d' कालावधी सुरक्षित राहतो, जेणेकरून वीकेंडलाही डेटा मिळेल
-        period_param = "5d" 
-
+    st.info("डेटा फेच आणि फिल्टर होत आहे... कृपया थांबा...")
     progress_bar = st.progress(0)
     
     for idx, ticker in enumerate(NIFTY_500_TICKERS):
         try:
-            # 1-Min डेटा फेच करणे
             data = yf.download(tickers=ticker, period=period_param, interval="1m", progress=False)
-            
             if data.empty:
                 continue
                 
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
             
-            # वेळेला भारतीय वेळेत (IST) सेट करणे
             data = convert_to_ist(data)
             
-            # जर हिस्ट्री मोड असेल तर फक्त शेवटच्या उपलब्ध पूर्ण ट्रेडिंग दिवसाचा (उदा. शुक्रवार) डेटा फिल्टर करणे
+            # शुक्रवार/लास्ट ट्रेडिंग सेशनसाठी फिल्टर
             if mode == "📅 Friday History (Full Day)":
                 all_days = data.index.normalize().unique()
                 if len(all_days) >= 1:
-                    # शेवटचा उपलब्ध दिवस (जो सामान्यतः शुक्रवार किंवा शेवटचा वर्किंग डे असेल)
-                    last_trading_day = all_days[-1] 
+                    last_trading_day = all_days[-1]
                     data = data[data.index.normalize() == last_trading_day]
             
-            signals = scan_stock_data(data, is_history_mode=(mode == "📅 Friday History (Full Day)"))
+            signals = scan_day_high_breakout(data, is_history_mode=(mode == "📅 Friday History (Full Day)"))
             
             for sig in signals:
                 triggered_stocks.append({
                     "Stock": ticker,
                     "Time (IST)": sig["Time"],
-                    "Price at Breakout": sig["Price"],
-                    "Breakout Volume": sig["Volume"],
-                    "Avg Volume": sig["Avg Vol (20)"],
+                    "Breakout Price": sig["Price"],
+                    "Old Day High": sig["Prev Day High"],
+                    "New Volume": sig["Breakout Volume"],
+                    "Old Max Volume": sig["Prev Max Volume"],
                     "Full_Data": data,
                     "Raw_Index": sig["Raw_Index"]
                 })
-                
         except Exception as e:
             pass
         
         progress_bar.progress((idx + 1) / len(NIFTY_500_TICKERS))
         
-    # --- निकाल दाखवणे ---
+    # --- डिस्प्ले रिझल्ट्स ---
     if triggered_stocks:
         df_results = pd.DataFrame(triggered_stocks)
+        st.success(f"🔥 तुमच्या 'Day High + Volume Breakout' लॉजिकनुसार {len(df_results)} सिग्नल्स सापडले!")
         
+        df_display = df_results[["Time (IST)", "Stock", "Breakout Price", "Old Day High", "New Volume", "Old Max Volume"]]
         if mode == "📅 Friday History (Full Day)":
-            st.success(f"🔥 गेल्या ट्रेडिंग सेशनमध्ये एकूण {len(df_results)} वेळा वॉल्यूम ब्रेकआउट्स झाले होते!")
-            # टेबल डिस्प्ले (वेळेनुसार सॉर्ट करून)
-            df_display = df_results[["Time (IST)", "Stock", "Price at Breakout", "Breakout Volume", "Avg Volume"]].sort_values(by="Time (IST)", ascending=False)
-        else:
-            st.success(f"🔥 आत्ताच्या लाईव्ह कॅंडलमध्ये {len(df_results)} शेअर्समध्ये अचानक मोठा वॉल्यूम आला आहे!")
-            df_display = df_results[["Stock", "Time (IST)", "Price at Breakout", "Breakout Volume", "Avg Volume"]]
+            df_display = df_display.sort_values(by="Time (IST)", ascending=False)
             
         st.dataframe(df_display, use_container_width=True)
         
-        # चार्ट्स पाहणे
-        st.subheader("📊 सविस्तर चार्ट्स विश्लेषण")
-        for index, stock in df_results.head(10).iterrows(): # टॉप १० सिग्नल्सचे चार्ट दाखवू जास्त लोड येऊ नये म्हणून
-            with st.expander(f"👁️ {stock['Stock']} - {stock['Time (IST)']} चा चार्ट"):
+        # चार्ट विजुअलायझेशन
+        st.subheader("📊 सिग्नल्सचे चार्ट्स (Zoomed View)")
+        for index, stock in df_results.head(10).iterrows():
+            with st.expander(f"👁️ {stock['Stock']} - {stock['Time (IST)']} चा ब्रेकआउट पहा"):
                 df_all = stock['Full_Data']
                 idx = stock['Raw_Index']
                 
-                # ब्रेकआउट वेळेच्या आजूबाजूच्या ३० कॅंडल्स दाखवू
-                start_c = max(0, idx - 25)
-                end_c = min(len(df_all), idx + 10)
+                start_c = max(0, idx - 30)
+                end_c = min(len(df_all), idx + 15)
                 df_chart = df_all.iloc[start_c:end_c]
                 
                 fig = go.Figure()
@@ -154,12 +145,15 @@ if scan_btn:
                     yaxis='y2', opacity=0.3
                 ))
                 
+                # जुना डे हाय दाखवण्यासाठी एक हॉरिझॉन्टल लाईन
+                fig.add_hline(y=stock['Old Day High'], line_dash="dash", line_color="red", annotation_text="Old Day High")
+                
                 fig.update_layout(
-                    title=f"{stock['Stock']} Volume Action Around {stock['Time (IST)']}",
+                    title=f"{stock['Stock']} - Breakout at {stock['Time (IST)']}",
                     yaxis=dict(title='Price'),
                     yaxis2=dict(title='Volume', overlaying='y', side='right'),
                     xaxis_rangeslider_visible=False
                 )
                 st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("निवडलेल्या मोडमध्ये कोणताही स्टॉक क्रायटेरिया मॅच करू शकला नाही.")
+        st.warning("या क्रायटेरियामध्ये बसणारा कोणताही स्टॉक सध्या सापडला नाही.")
