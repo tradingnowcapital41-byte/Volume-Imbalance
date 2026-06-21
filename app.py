@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
+import time
 
 # --- UI Config ---
 st.set_page_config(page_title="AlphaTracker | Terminal", layout="wide")
@@ -17,7 +18,7 @@ st.markdown("""
 st.title("🏹 AlphaTracker™ Terminal")
 st.caption("Institutional Volume Scanner • Mid & SmallCap Momentum Universe (Non-F&O)")
 
-# --- ⚡ १०० नॉन-F&O हाय-मोमेंटम स्टॉक्स ---
+# --- ⚡ १०० नॉन-F&O हाय-मोमेंटम स्टॉक्स यूनिवर्स ---
 TICKERS_POOL = [
     "NIACL.NS", "TARIL.NS", "AMBER.NS", "NETWEB.NS", "TEJASNET.NS", "HSCL.NS", "DATAPATTNS.NS", 
     "OLECTRA.NS", "WAAREEENER.NS", "HFCL.NS", "SOLARINDS.NS", "POONAWALLA.NS", "BDL.NS", "OLAELEC.NS", 
@@ -43,8 +44,8 @@ def convert_to_ist(df):
         df.index = df.index.tz_convert('Asia/Kolkata')
     return df
 
-# ⚡ CACHE ENGINE: हा फंक्शन डेटा मेमरीमध्ये लॉक करेल, ज्यामुळे सर्व्हर हँग होणार नाही
-@st.cache_data(ttl=60)  # १ मिनिटासाठी डेटा कॅश होईल, त्यानंतरच नवीन डेटा ओढेल
+# ⚡ SAFE CACHE ENGINE: १ मिनिटासाठी डेटा रॅममध्ये ठेवेल जेणेकरून याहू ब्लॉक करणार नाही
+@st.cache_data(ttl=60)
 def download_bulk_data(tickers_list, period_param):
     tickers_string = " ".join(tickers_list)
     df = yf.download(tickers=tickers_string, period=period_param, interval="1m", group_by='ticker', progress=False)
@@ -81,13 +82,14 @@ st.sidebar.header("🕹️ Control Terminal")
 mode = st.sidebar.radio("Select Mode:", ["📅 Last Session History", "🔴 LIVE Market Tracker"])
 scan_btn = st.sidebar.button("⚡ Run Scanner", type="primary", use_container_width=True)
 
+# मुख्य रनिंग लॉजिक
 if scan_btn or mode == "🔴 LIVE Market Tracker":
     all_signals = []
     stock_counts = {}
     is_live = (mode == "🔴 LIVE Market Tracker")
     period_param = "1d" if is_live else "5d"
     
-    with st.spinner("⏳ Cache Engine Active: Loading Universe Data safely..."):
+    with st.spinner("⏳ Loading Universe Data Safely..."):
         raw_data = download_bulk_data(TICKERS_POOL, period_param)
     
     if raw_data is not None and not raw_data.empty:
@@ -129,6 +131,10 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
             df_signals['Time_Obj'] = pd.to_datetime(df_signals['Time (IST)'], format='%I:%M %p')
             df_signals = df_signals.sort_values(by='Time_Obj', ascending=False)
 
+            if is_live:
+                latest = df_signals.iloc[0]
+                st.markdown(f"<div class='alert-banner'>🚨 LIVE INSTANT SIGNAL: Volume Activity in <b>{latest['Stock']}</b> at ₹{latest['Price']} ({latest['Time (IST)']})</div>", unsafe_allow_html=True)
+
             col1, col2 = st.columns([1, 3])
             with col1:
                 st.markdown("### Density Rank")
@@ -153,7 +159,11 @@ if scan_btn or mode == "🔴 LIVE Market Tracker":
         else:
             st.warning("No dynamic institutional breakouts found in this session.")
     else:
-        st.error("Yahoo Finance सर्व्हर व्यस्त आहे. कृपया २ सेकंदांनी पुन्हा 'Run Scanner' दाबा.")
+        st.error("Yahoo Finance कडून डेटा मिळाला नाही. २ सेकंद थांबा.")
+
+    # ⚡ इन-बिल्ट ऑटो-रिफ्रेश इंजिन (लायब्ररीशिवाय कडक ट्रॅकिंग)
+    if is_live:
+        time.sleep(30)  # दर ३० सेकंदांनी नवीन १-मिनिटाची कॅंडल चेक करेल
+        st.rerun()      # इन-बिल्ट फंक्शन सिस्टिमला रिफ्रेश करेल
 else:
-    st.info("💡 स्कॅनर सुरू करण्यासाठी डाव्या बाजूला असलेल्या '⚡ Run Scanner' बटणावर क्लिक करा.")
-    
+    st.info("💡 स्कॅनर सुरू करण्यासाठी डाव्या बाजूला असलेल्या '⚡ Run Scanner' बटणावर क्लिक करा किंवा LIVE मोड निवडा.")
