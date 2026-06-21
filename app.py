@@ -2,13 +2,31 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
+import time
 
-# Page Configuration
-st.set_page_config(page_title="Detailed Institutional Scanner", layout="wide")
-st.title("🏹 Nifty 50 Full Day Institutional Movement Tracker")
-st.write("हा स्कॅनर गेल्या शुक्रवारच्या (Last Trading Session) पूर्ण दिवसात कोणत्या स्टॉकमध्ये कधी-कधी आणि किती वेळा संस्थात्मक हालचाल झाली, त्याची अचूक कुंडली दाखवेल.")
+# --- Professional UI Configuration ---
+st.set_page_config(page_title="AlphaTracker | Institutional Scanner", layout="wide", page_icon="🏹")
 
-# --- Nifty 50 अचूक स्टॉक लिस्ट ---
+# Custom CSS for Premium Dark/Modern Trading Dashboard look
+st.markdown("""
+<style>
+    .reportview-container { background: #0e1117; }
+    .stDeployButton { display:none; }
+    footer { visibility: hidden; }
+    .metric-box {
+        background-color: #1e222d;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #00e676;
+        margin-bottom: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🏹 AlphaTracker: Live Institutional Block Order Scanner")
+st.caption("Tracks smart money algorithms, block trades, and institutional volume spikes on Nifty 50 constituents.")
+
+# --- Verified Nifty 50 Ticker List ---
 NIFTY_50_STOCKS = [
     "INFY.NS", "RELIANCE.NS", "BHARTIARTL.NS", "TCS.NS", "HDFCBANK.NS",
     "BAJFINANCE.NS", "ICICIBANK.NS", "HCLTECH.NS", "ADANIENT.NS", "MM.NS", 
@@ -29,155 +47,173 @@ def convert_to_ist(df):
         df.index = df.index.tz_convert('Asia/Kolkata')
     return df
 
-# --- सुधारित अचूक लॉजिक ---
-def scan_all_day_movements(df):
+# --- Core Algorithm Logic ---
+def scan_institutional_engine(df, scan_mode):
     triggered_signals = []
     if len(df) < 21:
         return triggered_signals
 
-    # सकाळी ९:४५ नंतरच्या सर्व कॅंडल्स तपासू (जेणेकरून सुरुवातीला २० मिनिटांचा बेस मिळेल)
-    for i in range(20, len(df)):
+    # In Live Mode, we only watch the most recent closed candle. In History, we parse the whole day.
+    start_idx = len(df) - 1 if scan_mode == "🔴 Live Real-Time Scan" else 20
+    end_idx = len(df)
+
+    for i in range(start_idx, end_idx):
         current_candle = df.iloc[i]
         current_volume = current_candle['Volume']
         current_close = current_candle['Close']
         current_time = df.index[i].strftime('%I:%M %p')
         
-        # मागच्या २० मिनिटांचा डेटा (कंसोलिडेशन आणि कोरडा वॉल्यूम तपासण्यासाठी)
+        # Calculate Dry/Quiet Volume base over preceding 20 periods
         prev_20_candles = df.iloc[i-20:i]
         avg_dry_volume = prev_20_candles['Volume'].mean()
         max_dry_volume = prev_20_candles['Volume'].max()
         
-        # जर वॉल्यूम सरासरीपेक्षा खूप कमी असेल तर मार्केट शांत आहे.
-        # 🎯 अटी: चालू कॅंडलचा वॉल्यूम मागच्या २० मिनिटांच्या सरासरीपेक्षा किमान ४.५ पट पाहिजे 
-        # आणि मागच्या २० मिनिटांतील सर्वोच्च वॉल्यूम पीकपेक्षा मोठा पाहिजे!
+        # Smart Money Entry Condition (Dry consolidation broken by 4.5x average volume explosion)
         if current_volume > (avg_dry_volume * 4.5) and current_volume > max_dry_volume:
             triggered_signals.append({
                 "Time": current_time,
                 "Price": round(current_close, 2),
                 "Volume": int(current_volume),
-                "Avg Dry Vol": int(avg_dry_volume),
+                "Avg_Dry_Vol": int(avg_dry_volume),
                 "Raw_Index": i
             })
             
     return triggered_signals
 
-# --- Sidebar UI ---
-st.sidebar.header("🕹️ Controls")
-scan_btn = st.sidebar.button("⚡ Fetch Friday's Full History", type="primary")
+# --- JavaScript Alert Injector (Audio + Modal Popup) ---
+def trigger_popup_alert(stock_name, price, time_str):
+    # Triggers a browser native alert box and plays a notification sound instantly
+    popup_html = f"""
+    <script>
+        var audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
+        audio.play();
+        alert('🚨 INSTITUTIONAL ACTIVITY DETECTED!\\n\\nStock: {stock_name}\\nPrice: ₹{price}\\nTime: {time_str}');
+    </script>
+    """
+    st.components.v1.html(popup_html, height=0, width=0)
 
-if scan_btn:
-    all_signals = []
-    stock_counts = {} # कोणता स्टॉक किती वेळा ट्रिगर झाला हे मोजण्यासाठी
-    
-    st.info("गेल्या शुक्रवारचा पूर्ण दिवसाचा १-मिनिटाचा डेटा गोळा केला जात आहे... कृपया १ मिनिट थांबा...")
-    progress_bar = st.progress(0)
-    
-    # सर्व ५० स्टॉक्स एकाच वेळी डाऊनलोड करू जेणेकरून वेळ वाचेल
-    tickers_string = " ".join(NIFTY_50_STOCKS)
-    raw_data = yf.download(tickers=tickers_string, period="5d", interval="1m", group_by='ticker', progress=False)
-    
-    for idx, ticker in enumerate(NIFTY_50_STOCKS):
-        try:
-            # सिंगल टिकरचा डेटा वेगळा करणे
-            if ticker in raw_data.columns.levels[0]:
-                data = raw_data[ticker].dropna()
-            else:
-                continue
-                
-            if data.empty or len(data) < 30:
-                continue
-                
-            data = convert_to_ist(data)
-            
-            # फक्त शेवटचा उपलब्ध पूर्ण दिवस (शुक्रवार) फिल्टर करणे
-            all_days = data.index.normalize().unique()
-            if len(all_days) >= 1:
-                last_trading_day = all_days[-1]
-                data = data[data.index.normalize() == last_trading_day]
-            
-            # या शेअरमध्ये दिवसभरात कुठे-कुठे वॉल्यूम स्पाइक आला ते शोधणे
-            signals = scan_all_day_movements(data)
-            
-            if signals:
-                stock_name = ticker.replace(".NS", "")
-                stock_counts[stock_name] = len(signals) # एकूण किती वेळा ट्रिगर झाला
-                
-                for sig in signals:
-                    all_signals.append({
-                        "Stock": stock_name,
-                        "Time (IST)": sig["Time"],
-                        "Price": sig["Price"],
-                        "Institutional Volume": sig["Volume"],
-                        "Avg Dry Vol (Previous 20m)": sig["Avg Dry Vol"],
-                        "Full_Data": data,
-                        "Raw_Index": sig["Raw_Index"]
-                    })
-        except Exception as e:
-            pass
-        
-        progress_bar.progress((idx + 1) / len(NIFTY_50_STOCKS))
-        
-    # --- निकाल डिस्प्ले करणे ---
-    if all_signals:
-        st.success(f"📊 शुक्रवारच्या दिवशी एकूण {len(all_signals)} वेळा संस्थात्मक खरेदीचे मोठे स्पाइक्स दिसले!")
-        
-        # १. समरी कार्ड्स / काउंटर टेबल
-        st.subheader("🎯 कोणत्या शेअरमध्ये किती वेळा 'इन्स्टिट्यूशनल मूव्ह' झाली?")
-        df_counts = pd.DataFrame(list(stock_counts.items()), columns=["Stock", "Total Breakouts (Times)"]).sort_values(by="Total Breakouts (Times)", ascending=False)
-        
-        # कॉलम लेआउट करून समरी दाखवू
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.dataframe(df_counts, hide_index=True)
-            
-        with col2:
-            st.info("💡 वरच्या टेबलमध्ये ज्या शेअरसमोर जास्त काउंट आहे, त्याचा अर्थ शुक्रवारच्या दिवशी त्या शेअरमध्ये मोठ्या इन्स्टिट्यूशन्सनी (FIIs/DIIs) एकापेक्षा जास्त वेळा मोठ्या ऑर्डर्स टाकून मूव्हमेंट केली होती.")
+# --- Sidebar UI Controls ---
+st.sidebar.image("https://img.icons8.com/nolan/64/bullish.png", width=50)
+st.sidebar.title("AlphaTracker Controls")
+selected_mode = st.sidebar.radio("Select Operational Mode:", ["🔴 Live Real-Time Scan", "📅 Last Trading Session History"])
+refresh_interval = st.sidebar.slider("Live Auto-Refresh Rate (Seconds):", 15, 60, 30) if selected_mode == "🔴 Live Real-Time Scan" else None
+execute_scan = st.sidebar.button("⚡ Start Scanning Engine", type="primary")
 
-        st.markdown("---")
+# --- Scanning Engine Thread execution ---
+if execute_scan or selected_mode == "🔴 Live Real-Time Scan":
+    
+    # Simple placeholder wrapper for real-time looping
+    while True:
+        all_signals = []
+        stock_counts = {}
         
-        # २. संपूर्ण दिवसभराची क्रोनोलॉजिकल लिस्ट (Timeline)
-        st.subheader("🕒 शुक्रवारची संपूर्ण टाइमलाईन (वेळेनुसार सर्व शेअर्सची लिस्ट)")
-        df_all_signals = pd.DataFrame(all_signals)
-        
-        # वेळेनुसार सॉर्टिंग (सकाळपासून दुपारी ३:३० पर्यंत)
-        df_all_signals['Time_Obj'] = pd.to_datetime(df_all_signals['Time (IST)'], format='%I:%M %p')
-        df_all_signals = df_all_signals.sort_values(by='Time_Obj', ascending=True)
-        
-        df_display = df_all_signals[["Time (IST)", "Stock", "Price", "Institutional Volume", "Avg Dry Vol (Previous 20m)"]]
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        if selected_mode == "🔴 Live Real-Time Scan":
+            st.toast("🔄 Refreshing Live Engine... Fetching latest ticks.", icon="🚀")
+            period_param = "1d"
+        else:
+            st.info("📊 Fetching historical data pipeline. Please wait...")
+            period_param = "5d"
 
-        # ३. विजुअल चार्ट्स गॅलरी
-        st.markdown("---")
-        st.subheader("📊 टॉप मूव्हमेंट्सचे थेट चार्ट्स तपासा")
+        # Bulk asynchronous-like download to optimize Streamlit cloud speed
+        tickers_str = " ".join(NIFTY_50_STOCKS)
+        raw_data = yf.download(tickers=tickers_str, period=period_param, interval="1m", group_by='ticker', progress=False)
         
-        # जास्तीत जास्त १५ प्रमुख चार्ट्स दाखवू जेणेकरून ॲप हँग होणार नाही
-        for index, row in df_all_signals.head(15).iterrows():
-            with st.expander(f"📈 {row['Stock']} - दुपारी/सकाळी {row['Time (IST)']} (Price: {row['Price']})"):
-                df_chart_all = row['Full_Data']
-                idx = row['Raw_Index']
+        for ticker in NIFTY_50_STOCKS:
+            try:
+                if ticker in raw_data.columns.levels[0]:
+                    data = raw_data[ticker].dropna()
+                else:
+                    continue
+                    
+                if data.empty or len(data) < 25:
+                    continue
+                    
+                data = convert_to_ist(data)
                 
-                # ब्रेकआउटच्या मागच्या २० आणि पुढच्या १० कॅंडल्स
-                start_c = max(0, idx - 20)
-                end_c = min(len(df_chart_all), idx + 15)
-                df_slice = df_chart_all.iloc[start_c:end_c]
+                # Filter specifically down to Friday / Last trading day
+                all_days = data.index.normalize().unique()
+                if len(all_days) >= 1:
+                    data = data[data.index.normalize() == all_days[-1]]
                 
-                fig = go.Figure()
-                fig.add_trace(go.Candlestick(
-                    x=df_slice.index, open=df_slice['Open'], high=df_slice['High'],
-                    low=df_slice['Low'], close=df_slice['Close'], name='Price'
-                ))
-                fig.add_trace(go.Bar(
-                    x=df_slice.index, y=df_slice['Volume'], name='Volume Spike',
-                    yaxis='y2', opacity=0.4, marker_color='green'
-                ))
+                signals = scan_institutional_engine(data, selected_mode)
                 
-                fig.update_layout(
-                    title=f"{row['Stock']} Volume Activity at {row['Time (IST)']}",
-                    yaxis=dict(title='Price'),
-                    yaxis2=dict(title='Volume', overlaying='y', side='right'),
-                    xaxis_rangeslider_visible=False
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                if signals:
+                    s_name = ticker.replace(".NS", "")
+                    stock_counts[s_name] = len(signals)
+                    
+                    for sig in signals:
+                        all_signals.append({
+                            "Stock": s_name,
+                            "Time (IST)": sig["Time"],
+                            "Execution Price": sig["Price"],
+                            "Institutional Volume": sig["Volume"],
+                            "Avg Base Vol (20m)": sig["Avg_Dry_Vol"],
+                            "Full_Data": data,
+                            "Raw_Index": sig["Raw_Index"]
+                        })
+            except Exception:
+                pass
+        
+        # --- Handle Triggered Results ---
+        if all_signals:
+            df_signals = pd.DataFrame(all_signals)
+            df_signals['Time_Obj'] = pd.to_datetime(df_signals['Time (IST)'], format='%I:%M %p')
+            df_signals = df_signals.sort_values(by='Time_Obj', ascending=False) # Latest at the top
+            
+            # 🚨 TRIGGER POPUP & SOUND FOR LIVE ALERTS
+            if selected_mode == "🔴 Live Real-Time Scan":
+                latest_alert = df_signals.iloc[0]
+                st.balloons() # Visual on-screen celebration
+                trigger_popup_alert(latest_alert['Stock'], latest_alert['Execution Price'], latest_alert['Time (IST)'])
+                st.error(f"🚨 LIVE ALERT: Institutional block order execution detected in {latest_alert['Stock']} at ₹{latest_alert['Execution Price']}!")
+            
+            # --- PROFESSIONAL UI BREAKDOWN ---
+            col_metrics, col_table = st.columns([1, 3])
+            
+            with col_metrics:
+                st.subheader("💡 Volume Rank")
+                df_counts = pd.DataFrame(list(stock_counts.items()), columns=["Stock", "Frequency"]).sort_values(by="Frequency", ascending=False)
+                st.dataframe(df_counts, hide_index=True, use_container_width=True)
                 
-    else:
-        st.warning("शुक्रवारच्या डेटामध्ये या क्रायटेरियानुसार एकही सिग्नल सापडला नाही. सिस्टिम पॅरामीटर्स तपासा.")
+            with col_table:
+                st.subheader("📋 Active Signals Terminal")
+                df_display = df_signals[["Time (IST)", "Stock", "Execution Price", "Institutional Volume", "Avg Base Vol (20m)"]]
+                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                
+            # --- GRAPHING GALLERY ---
+            st.markdown("---")
+            st.subheader("📊 Interactive Execution Visuals")
+            for index, row in df_signals.head(5).iterrows():
+                with st.expander(f"📈 Chart Studio - {row['Stock']} at {row['Time (IST)']}"):
+                    df_chart_all = row['Full_Data']
+                    idx = row['Raw_Index']
+                    
+                    df_slice = df_chart_all.iloc[max(0, idx - 20):min(len(df_chart_all), idx + 15)]
+                    
+                    fig = go.Figure()
+                    fig.add_trace(go.Candlestick(
+                        x=df_slice.index, open=df_slice['Open'], high=df_slice['High'],
+                        low=df_slice['Low'], close=df_slice['Close'], name='Price action'
+                    ))
+                    fig.add_trace(go.Bar(
+                        x=df_slice.index, y=df_slice['Volume'], name='Smart Money Volume',
+                        yaxis='y2', opacity=0.4, marker_color='#00e676'
+                    ))
+                    fig.update_layout(
+                        template="plotly_dark",
+                        yaxis=dict(title='Price (₹)'),
+                        yaxis2=dict(title='Volume', overlaying='y', side='right'),
+                        xaxis_rangeslider_visible=False,
+                        margin=dict(l=20, r=20, t=30, b=20)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+            break
+        else:
+            if selected_mode != "🔴 Live Real-Time Scan":
+                st.warning("No significant institutional anomalies found matching the current metric constraints.")
+                break
+                
+        # Handle live mode loop delay execution
+        if selected_mode == "🔴 Live Real-Time Scan":
+            time.sleep(refresh_interval)
+            st.rerun()
